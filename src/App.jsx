@@ -1,24 +1,29 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Cloudinary } from '@cloudinary/url-gen';
-import { AdvancedImage, responsive, placeholder } from '@cloudinary/react';
 import toast, { Toaster } from 'react-hot-toast';
-import './App.css'; // Asegúrate de importar el CSS
+import './App.css';
 
-// Configuración de Cloudinary (opcional, si no la usas, las imágenes se guardan como blob)
-const CLOUD_NAME = 'YOUR_CLOUD_NAME';
-const UPLOAD_PRESET = 'YOUR_UPLOAD_PRESET';
-const cld = new Cloudinary({ cloud: { cloudName: CLOUD_NAME } });
+// ========================================================
+// CONFIGURACIÓN DE LA API
+// ========================================================
+const API_BASE = 'http://localhost:3000/api';
 
-// Fix para iconos de Leaflet
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-});
+const authFetch = async (endpoint, options = {}) => {
+  const token = localStorage.getItem('token');
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(token && { Authorization: `Bearer ${token}` }),
+    ...options.headers,
+  };
+  const config = { ...options, headers };
+  const response = await fetch(`${API_BASE}${endpoint}`, config);
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Error en la petición');
+  }
+  return response.json();
+};
 
 // ========================================================
 // DATOS ESTÁTICOS DE ESPAÑA
@@ -40,10 +45,50 @@ const citiesByProvinceSpain = {
 };
 
 // ========================================================
-// COMPONENTES DE VISTA (fuera de App para evitar recreaciones)
+// FUNCIÓN PARA OBTENER URL DE IMAGEN
+// ========================================================
+const getImageUrl = (src) => {
+  if (!src) return 'https://via.placeholder.com/400x200?text=Sin+imagen';
+  if (src.startsWith('data:image')) return src;
+  if (src.startsWith('/uploads/')) return `http://localhost:3000${src}`;
+  if (src.startsWith('http')) return src;
+  return 'https://via.placeholder.com/400x200?text=Sin+imagen';
+};
+
+// ========================================================
+// COMPONENTE DE MAPA GRATUITO CON IFRAME
+// ========================================================
+const MapaIframe = ({ lat, lng, direccion }) => {
+  let mapSrc = '';
+  if (lat && lng) {
+    mapSrc = `https://www.google.com/maps?q=${lat},${lng}&output=embed`;
+  } else if (direccion) {
+    const addressEncoded = encodeURIComponent(direccion);
+    mapSrc = `https://www.google.com/maps?q=${addressEncoded}&output=embed`;
+  } else {
+    return <div className="map-placeholder">📍 Ubicación no disponible</div>;
+  }
+  return (
+    <div className="detail-map">
+      <h3>Ubicación</h3>
+      <iframe
+        title="mapa"
+        src={mapSrc}
+        width="100%"
+        height="300"
+        style={{ border: 0, borderRadius: '8px' }}
+        allowFullScreen
+        loading="lazy"
+        referrerPolicy="no-referrer-when-downgrade"
+      ></iframe>
+    </div>
+  );
+};
+
+// ========================================================
+// COMPONENTES DE VISTA
 // ========================================================
 
-// LoginView
 const LoginView = ({ loginForm, setLoginForm, handleLogin, errorMessage, setView }) => (
   <div className="login-container">
     <div className="login-card">
@@ -53,23 +98,11 @@ const LoginView = ({ loginForm, setLoginForm, handleLogin, errorMessage, setView
       <form onSubmit={handleLogin}>
         <div className="form-group">
           <label>Email</label>
-          <input
-            type="email"
-            placeholder="email@ejemplo.com"
-            value={loginForm.email}
-            onChange={(e) => setLoginForm({...loginForm, email: e.target.value})}
-            required
-          />
+          <input type="email" placeholder="email@ejemplo.com" value={loginForm.email} onChange={(e) => setLoginForm({...loginForm, email: e.target.value})} required />
         </div>
         <div className="form-group">
           <label>Contraseña</label>
-          <input
-            type="password"
-            placeholder="••••••••"
-            value={loginForm.password}
-            onChange={(e) => setLoginForm({...loginForm, password: e.target.value})}
-            required
-          />
+          <input type="password" placeholder="••••••••" value={loginForm.password} onChange={(e) => setLoginForm({...loginForm, password: e.target.value})} required />
         </div>
         {errorMessage && <p className="error-message">{errorMessage}</p>}
         <button type="submit" className="login-button">Iniciar sesión</button>
@@ -77,13 +110,12 @@ const LoginView = ({ loginForm, setLoginForm, handleLogin, errorMessage, setView
       <p className="register-link">¿No tienes cuenta? <button onClick={() => setView('register')} className="link-button">Regístrate</button></p>
       <div className="demo-box">
         <p><strong>Demo admin:</strong> admin@inmobiliaria.com / admin123</p>
-        <p><strong>Demo usuario:</strong> usuario@ejemplo.com / 123456 (regístrate)</p>
+        <p><strong>Demo usuario:</strong> regístrate con email y contraseña</p>
       </div>
     </div>
   </div>
 );
 
-// RegisterView
 const RegisterView = ({ registerForm, setRegisterForm, handleRegister, errorMessage, setView }) => (
   <div className="login-container">
     <div className="login-card">
@@ -92,34 +124,15 @@ const RegisterView = ({ registerForm, setRegisterForm, handleRegister, errorMess
       <form onSubmit={handleRegister}>
         <div className="form-group">
           <label>Nombre</label>
-          <input
-            type="text"
-            placeholder="Tu nombre"
-            value={registerForm.name}
-            onChange={(e) => setRegisterForm({...registerForm, name: e.target.value})}
-            required
-          />
+          <input type="text" placeholder="Tu nombre" value={registerForm.name} onChange={(e) => setRegisterForm({...registerForm, name: e.target.value})} required />
         </div>
         <div className="form-group">
           <label>Email</label>
-          <input
-            type="email"
-            placeholder="email@ejemplo.com"
-            value={registerForm.email}
-            onChange={(e) => setRegisterForm({...registerForm, email: e.target.value})}
-            required
-          />
+          <input type="email" placeholder="email@ejemplo.com" value={registerForm.email} onChange={(e) => setRegisterForm({...registerForm, email: e.target.value})} required />
         </div>
         <div className="form-group">
           <label>Contraseña</label>
-          <input
-            type="password"
-            placeholder="Mínimo 6 caracteres"
-            value={registerForm.password}
-            onChange={(e) => setRegisterForm({...registerForm, password: e.target.value})}
-            required
-            minLength="6"
-          />
+          <input type="password" placeholder="Mínimo 6 caracteres" value={registerForm.password} onChange={(e) => setRegisterForm({...registerForm, password: e.target.value})} required minLength="6" />
         </div>
         {errorMessage && <p className="error-message">{errorMessage}</p>}
         <button type="submit" className="login-button">Registrarse</button>
@@ -129,7 +142,6 @@ const RegisterView = ({ registerForm, setRegisterForm, handleRegister, errorMess
   </div>
 );
 
-// UploadView (formulario de subida/edición)
 const UploadView = ({
   propertyForm, setPropertyForm, handlePropertySubmit, isEditing, isUploading,
   handleImageUpload, removeImage, resetPropertyForm, setView, provincesSpain, citiesByProvinceSpain
@@ -139,83 +151,35 @@ const UploadView = ({
     <form onSubmit={handlePropertySubmit}>
       <div className="form-group">
         <label>Título *</label>
-        <input
-          type="text"
-          placeholder="Ej: Casa moderna en Madrid"
-          value={propertyForm.title}
-          onChange={(e) => setPropertyForm({...propertyForm, title: e.target.value})}
-          required
-        />
+        <input type="text" placeholder="Ej: Casa moderna en Madrid" value={propertyForm.title} onChange={(e) => setPropertyForm({...propertyForm, title: e.target.value})} required />
       </div>
       <div className="form-group">
         <label>Descripción</label>
-        <textarea
-          placeholder="Describe la propiedad..."
-          value={propertyForm.description}
-          onChange={(e) => setPropertyForm({...propertyForm, description: e.target.value})}
-          required
-          rows="4"
-        />
+        <textarea placeholder="Describe la propiedad..." value={propertyForm.description} onChange={(e) => setPropertyForm({...propertyForm, description: e.target.value})} required rows="4" />
       </div>
       <div className="form-row">
         <div className="form-group">
           <label>Provincia *</label>
-          <select
-            value={propertyForm.province}
-            onChange={(e) => setPropertyForm({...propertyForm, province: e.target.value, city: ''})}
-            required
-          >
+          <select value={propertyForm.province} onChange={(e) => setPropertyForm({...propertyForm, province: e.target.value, city: ''})} required>
             <option value="">Selecciona provincia</option>
             {provincesSpain.map(p => <option key={p} value={p}>{p}</option>)}
           </select>
         </div>
         <div className="form-group">
           <label>Ciudad *</label>
-          <select
-            value={propertyForm.city}
-            onChange={(e) => setPropertyForm({...propertyForm, city: e.target.value})}
-            required
-            disabled={!propertyForm.province}
-          >
+          <select value={propertyForm.city} onChange={(e) => setPropertyForm({...propertyForm, city: e.target.value})} required disabled={!propertyForm.province}>
             <option value="">Selecciona ciudad</option>
-            {propertyForm.province && citiesByProvinceSpain[propertyForm.province]?.map(c => (
-              <option key={c} value={c}>{c}</option>
-            ))}
+            {propertyForm.province && citiesByProvinceSpain[propertyForm.province]?.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
       </div>
       <div className="form-group">
         <label>Calle y número *</label>
-        <input
-          type="text"
-          placeholder="Ej: Gran Vía 25"
-          value={propertyForm.street}
-          onChange={(e) => setPropertyForm({...propertyForm, street: e.target.value})}
-          required
-        />
+        <input type="text" placeholder="Ej: Gran Vía 25" value={propertyForm.street} onChange={(e) => setPropertyForm({...propertyForm, street: e.target.value})} required />
       </div>
       <div className="form-row">
-        <div className="form-group">
-          <label>Tipo de propiedad</label>
-          <select
-            value={propertyForm.propertyType}
-            onChange={(e) => setPropertyForm({...propertyForm, propertyType: e.target.value})}
-          >
-            <option value="casa">Casa</option><option value="piso">Piso</option><option value="ático">Ático</option>
-            <option value="estudio">Estudio</option><option value="loft">Loft</option><option value="local">Local</option>
-            <option value="garaje">Plaza de garaje</option>
-          </select>
-        </div>
-        <div className="form-group">
-          <label>Precio (€) *</label>
-          <input
-            type="number"
-            placeholder="250000"
-            value={propertyForm.price}
-            onChange={(e) => setPropertyForm({...propertyForm, price: e.target.value})}
-            required
-          />
-        </div>
+        <div className="form-group"><label>Tipo</label><select value={propertyForm.propertyType} onChange={(e) => setPropertyForm({...propertyForm, propertyType: e.target.value})}><option value="casa">Casa</option><option value="piso">Piso</option><option value="ático">Ático</option><option value="estudio">Estudio</option><option value="loft">Loft</option><option value="local">Local</option><option value="garaje">Plaza de garaje</option></select></div>
+        <div className="form-group"><label>Precio (€) *</label><input type="number" placeholder="250000" value={propertyForm.price} onChange={(e) => setPropertyForm({...propertyForm, price: e.target.value})} required /></div>
       </div>
       <div className="form-row">
         <div className="form-group"><label>Área (m²)</label><input type="number" placeholder="120" value={propertyForm.area} onChange={(e) => setPropertyForm({...propertyForm, area: e.target.value})} required /></div>
@@ -238,7 +202,7 @@ const UploadView = ({
           <div className="image-preview">
             {propertyForm.images.map((url, idx) => (
               <div key={idx} className="image-preview-item">
-                <AdvancedImage cldImg={cld.image(url)} plugins={[responsive(), placeholder()]} />
+                <img src={getImageUrl(url)} alt="preview" style={{ width: '100px', height: '100px', objectFit: 'cover' }} />
                 <button type="button" onClick={() => removeImage(idx)} className="remove-image">✕</button>
               </div>
             ))}
@@ -253,69 +217,118 @@ const UploadView = ({
   </div>
 );
 
-// PropertiesList
+// PropertiesView con filtros colapsables (mejora móvil)
 const PropertiesView = ({
-  filters, setFilters, filteredProperties, currentPage, setCurrentPage, totalPages,
+  filters, setFilters, properties, loading, currentPage, setCurrentPage, totalPages,
   favorites, toggleFavorite, setSelectedProperty, setView, currentUser, editProperty, confirmDelete,
   provincesSpain, citiesByProvinceSpain, formatPrice
 }) => {
-  const paginatedProperties = filteredProperties.slice((currentPage - 1) * 6, currentPage * 6);
+  const [showFilters, setShowFilters] = useState(false);
+  const paginatedProperties = properties.slice((currentPage - 1) * 6, currentPage * 6);
+  
+  const hasActiveFilters = Object.values(filters).some(v => v !== '' && v !== false);
+  
   return (
     <div className="properties-page">
       <div className="filters-section">
-        <h3>Filtros</h3>
-        <div className="filters-grid">
-          <div className="form-group">
-            <label>Provincia</label>
-            <select value={filters.province} onChange={(e) => setFilters({...filters, province: e.target.value, city: ''})}>
-              <option value="">Todas</option>
-              {provincesSpain.map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
+        <button 
+          className="filters-toggle-btn"
+          onClick={() => setShowFilters(!showFilters)}
+        >
+          <span className="toggle-icon">{showFilters ? '▲' : '▼'}</span>
+          <span>Filtros</span>
+          {hasActiveFilters && <span className="filter-badge">●</span>}
+        </button>
+        
+        {showFilters && (
+          <div className="filters-grid">
+            <div className="form-group">
+              <label>Provincia</label>
+              <select value={filters.province} onChange={(e) => setFilters({...filters, province: e.target.value, city: ''})}>
+                <option value="">Todas</option>
+                {provincesSpain.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Ciudad</label>
+              <select value={filters.city} onChange={(e) => setFilters({...filters, city: e.target.value})} disabled={!filters.province}>
+                <option value="">Todas</option>
+                {filters.province && citiesByProvinceSpain[filters.province]?.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Tipo</label>
+              <select value={filters.propertyType} onChange={(e) => setFilters({...filters, propertyType: e.target.value})}>
+                <option value="">Todos</option>
+                <option value="casa">Casa</option>
+                <option value="piso">Piso</option>
+                <option value="ático">Ático</option>
+                <option value="loft">Loft</option>
+                <option value="local">Local</option>
+                <option value="garaje">Garaje</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Precio min</label>
+              <input type="number" value={filters.priceMin} onChange={(e) => setFilters({...filters, priceMin: e.target.value})} placeholder="0" />
+            </div>
+            <div className="form-group">
+              <label>Precio max</label>
+              <input type="number" value={filters.priceMax} onChange={(e) => setFilters({...filters, priceMax: e.target.value})} placeholder="9999999" />
+            </div>
+            <div className="form-group">
+              <label>Habitaciones</label>
+              <input type="number" value={filters.bedrooms} onChange={(e) => setFilters({...filters, bedrooms: e.target.value})} placeholder="0" />
+            </div>
+            <div className="form-group">
+              <label>Baños</label>
+              <input type="number" value={filters.bathrooms} onChange={(e) => setFilters({...filters, bathrooms: e.target.value})} placeholder="0" />
+            </div>
+            <div className="form-group">
+              <label>Ocupado</label>
+              <select value={filters.occupied} onChange={(e) => setFilters({...filters, occupied: e.target.value})}>
+                <option value="">Todos</option>
+                <option value="false">No</option>
+                <option value="true">Sí</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label>REO</label>
+              <select value={filters.reo} onChange={(e) => setFilters({...filters, reo: e.target.value})}>
+                <option value="">Todos</option>
+                <option value="false">No</option>
+                <option value="true">Sí</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <button onClick={() => setFilters({province: '', city: '', propertyType: '', priceMin: '', priceMax: '', bedrooms: '', bathrooms: '', occupied: '', reo: ''})} className="reset-filters-btn">
+                Limpiar todo
+              </button>
+            </div>
           </div>
-          <div className="form-group">
-            <label>Ciudad</label>
-            <select value={filters.city} onChange={(e) => setFilters({...filters, city: e.target.value})} disabled={!filters.province}>
-              <option value="">Todas</option>
-              {filters.province && citiesByProvinceSpain[filters.province]?.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-          <div className="form-group">
-            <label>Tipo</label>
-            <select value={filters.propertyType} onChange={(e) => setFilters({...filters, propertyType: e.target.value})}>
-              <option value="">Todos</option>
-              <option value="casa">Casa</option><option value="piso">Piso</option><option value="ático">Ático</option>
-              <option value="loft">Loft</option><option value="local">Local</option><option value="garaje">Garaje</option>
-            </select>
-          </div>
-          <div className="form-group"><label>Precio mínimo (€)</label><input type="number" value={filters.priceMin} onChange={(e) => setFilters({...filters, priceMin: e.target.value})} placeholder="0" /></div>
-          <div className="form-group"><label>Precio máximo (€)</label><input type="number" value={filters.priceMax} onChange={(e) => setFilters({...filters, priceMax: e.target.value})} placeholder="9999999" /></div>
-          <div className="form-group"><label>Habitaciones (mín)</label><input type="number" value={filters.bedrooms} onChange={(e) => setFilters({...filters, bedrooms: e.target.value})} placeholder="0" /></div>
-          <div className="form-group"><label>Baños (mín)</label><input type="number" value={filters.bathrooms} onChange={(e) => setFilters({...filters, bathrooms: e.target.value})} placeholder="0" /></div>
-          <div className="form-group"><label>Ocupado</label><select value={filters.occupied} onChange={(e) => setFilters({...filters, occupied: e.target.value})}><option value="">Todos</option><option value="false">No</option><option value="true">Sí</option></select></div>
-          <div className="form-group"><label>REO</label><select value={filters.reo} onChange={(e) => setFilters({...filters, reo: e.target.value})}><option value="">Todos</option><option value="false">No</option><option value="true">Sí</option></select></div>
-          <div className="form-group">
-            <button onClick={() => setFilters({province: '', city: '', propertyType: '', priceMin: '', priceMax: '', bedrooms: '', bathrooms: '', occupied: '', reo: ''})} className="reset-filters-btn">
+        )}
+        
+        {loading && <p className="loading-text">Cargando propiedades...</p>}
+        <div className="results-count">
+          {properties.length} propiedades encontradas
+          {hasActiveFilters && (
+            <button className="clear-filters-link" onClick={() => setFilters({province: '', city: '', propertyType: '', priceMin: '', priceMax: '', bedrooms: '', bathrooms: '', occupied: '', reo: ''})}>
               Limpiar filtros
             </button>
-          </div>
+          )}
         </div>
-        <p className="results-count">{filteredProperties.length} propiedades encontradas</p>
       </div>
 
       <div className="properties-grid">
         {paginatedProperties.map(property => (
           <div key={property.id} className="property-card" onClick={() => { setSelectedProperty(property); setView('detail'); }}>
             <div className="card-image">
-              {property.images && property.images[0] ? (
-                <AdvancedImage cldImg={cld.image(property.images[0])} plugins={[responsive(), placeholder()]} />
-              ) : (
-                <img src="https://via.placeholder.com/400x200?text=Sin+imagen" alt="placeholder" />
-              )}
+              <img src={getImageUrl(property.images?.[0])} alt={property.title} style={{ width: '100%', height: '200px', objectFit: 'cover' }} />
               <button className={`favorite-btn ${favorites.includes(property.id) ? 'active' : ''}`} onClick={(e) => toggleFavorite(e, property.id)}>
                 {favorites.includes(property.id) ? '❤️' : '🤍'}
               </button>
               <span className="property-type">{property.propertyType}</span>
-              {currentUser?.role === 'admin' && (
+              {(currentUser?.role === 'admin' || currentUser?.id === property.user_id) && (
                 <div className="card-actions">
                   <button onClick={(e) => { e.stopPropagation(); editProperty(property); }} className="edit-btn">✏️</button>
                   <button onClick={(e) => { e.stopPropagation(); confirmDelete(property); }} className="delete-btn">🗑️</button>
@@ -338,29 +351,25 @@ const PropertiesView = ({
         ))}
       </div>
 
-      {Math.ceil(filteredProperties.length / 6) > 1 && (
+      {totalPages > 1 && (
         <div className="pagination">
           <button onClick={() => setCurrentPage(p => Math.max(1, p-1))} disabled={currentPage === 1}>Anterior</button>
-          <span>Página {currentPage} de {Math.ceil(filteredProperties.length / 6)}</span>
-          <button onClick={() => setCurrentPage(p => Math.min(Math.ceil(filteredProperties.length / 6), p+1))} disabled={currentPage === Math.ceil(filteredProperties.length / 6)}>Siguiente</button>
+          <span>Página {currentPage} de {totalPages}</span>
+          <button onClick={() => setCurrentPage(p => Math.min(totalPages, p+1))} disabled={currentPage === totalPages}>Siguiente</button>
         </div>
       )}
     </div>
   );
 };
 
-// DetailView
-const DetailView = ({ selectedProperty, setView, formatPrice }) => (
-  selectedProperty && (
+const DetailView = ({ selectedProperty, setView, formatPrice }) => {
+  const direccion = `${selectedProperty.street}, ${selectedProperty.city}, ${selectedProperty.province}`;
+  return (
     <div className="detail-page">
       <button className="back-btn" onClick={() => setView('properties')}>← Volver</button>
       <div className="detail-content">
         <div className="detail-gallery">
-          {selectedProperty.images && selectedProperty.images[0] ? (
-            <AdvancedImage cldImg={cld.image(selectedProperty.images[0])} plugins={[responsive(), placeholder()]} className="detail-image" />
-          ) : (
-            <img src="https://via.placeholder.com/800x400?text=Sin+imagen" alt="placeholder" className="detail-image" />
-          )}
+          <img src={getImageUrl(selectedProperty.images?.[0])} alt={selectedProperty.title} className="detail-image" />
         </div>
         <div className="detail-info">
           <h1>{selectedProperty.title}</h1>
@@ -375,37 +384,14 @@ const DetailView = ({ selectedProperty, setView, formatPrice }) => (
           </div>
           <h3>Descripción</h3>
           <p className="detail-description">{selectedProperty.description}</p>
-          {selectedProperty.features && selectedProperty.features.length > 0 && (
-            <>
-              <h3>Características</h3>
-              <ul className="features-list">
-                {selectedProperty.features.map((f, i) => <li key={i}>{f}</li>)}
-              </ul>
-            </>
-          )}
-          {selectedProperty.lat && selectedProperty.lng && (
-            <div className="detail-map">
-              <h3>Ubicación</h3>
-              <MapContainer center={[selectedProperty.lat, selectedProperty.lng]} zoom={13} style={{ height: '300px', width: '100%', borderRadius: '8px' }}>
-                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' />
-                <Marker position={[selectedProperty.lat, selectedProperty.lng]}>
-                  <Popup>{selectedProperty.title}</Popup>
-                </Marker>
-              </MapContainer>
-            </div>
-          )}
-          <div className="agent-info">
-            <img src={selectedProperty.agent.photo} alt={selectedProperty.agent.name} />
-            <div><p><strong>{selectedProperty.agent.name}</strong></p><p>{selectedProperty.agent.phone}</p></div>
-          </div>
-          <p className="detail-date">Publicado: {selectedProperty.createdAt}</p>
+          <MapaIframe lat={selectedProperty.lat} lng={selectedProperty.lng} direccion={direccion} />
+          <p className="detail-date">Publicado: {new Date(selectedProperty.createdAt).toLocaleDateString()}</p>
         </div>
       </div>
     </div>
-  )
-);
+  );
+};
 
-// AdminUsersView
 const AdminUsersView = ({ users, deleteUser, setView }) => (
   <div className="admin-users-container">
     <h2>Gestión de usuarios</h2>
@@ -422,11 +408,7 @@ const AdminUsersView = ({ users, deleteUser, setView }) => (
               <td>{user.name}</td>
               <td>{user.email}</td>
               <td>{user.role === 'admin' ? 'Administrador' : 'Usuario'}</td>
-              <td>
-                {user.role !== 'admin' && (
-                  <button onClick={() => deleteUser(user.id)} className="delete-user-btn">Eliminar</button>
-                )}
-              </td>
+              <td>{user.role !== 'admin' && <button onClick={() => deleteUser(user.id)} className="delete-user-btn">Eliminar</button>}</td>
             </tr>
           ))}
         </tbody>
@@ -439,7 +421,6 @@ const AdminUsersView = ({ users, deleteUser, setView }) => (
 // COMPONENTE PRINCIPAL App
 // ========================================================
 function App() {
-  // Estados de autenticación y datos
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const [users, setUsers] = useState([]);
@@ -447,20 +428,14 @@ function App() {
   const [favorites, setFavorites] = useState([]);
   const [view, setView] = useState('login');
   const [selectedProperty, setSelectedProperty] = useState(null);
-  const [filteredProperties, setFilteredProperties] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-
-  // Paginación
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 6;
-
-  // Filtros
+  const [totalPages, setTotalPages] = useState(1);
   const [filters, setFilters] = useState({
     province: '', city: '', propertyType: '', priceMin: '', priceMax: '',
     bedrooms: '', bathrooms: '', occupied: '', reo: ''
   });
-
-  // Formularios
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [registerForm, setRegisterForm] = useState({ name: '', email: '', password: '' });
   const [propertyForm, setPropertyForm] = useState({
@@ -473,199 +448,155 @@ function App() {
   const [propertyToDelete, setPropertyToDelete] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  // Datos mock iniciales
-  const mockProperties = [
-    {
-      id: 1,
-      title: "Ático dúplex con terraza 50m² en Madrid Centro",
-      description: "Espectacular ático en pleno centro de Madrid, con terraza y vistas.",
-      price: 550000,
-      province: "Madrid",
-      city: "Madrid",
-      street: "Gran Vía 25",
-      bedrooms: 3,
-      bathrooms: 2,
-      area: 180,
-      propertyType: "ático",
-      occupied: false,
-      reo: false,
-      images: ["https://res.cloudinary.com/demo/image/upload/sample.jpg"],
-      features: ["Terraza", "Piscina comunitaria", "Parking"],
-      agent: { name: "Administrador", phone: "+34 91 123 4567", photo: "https://randomuser.me/api/portraits/lego/1.jpg" },
-      createdAt: "2025-01-15",
-      lat: 40.4168,
-      lng: -3.7038
-    },
-    {
-      id: 2,
-      title: "Loft industrial en Poblenou, Barcelona",
-      description: "Loft moderno con acabados industriales, cerca del mar.",
-      price: 380000,
-      province: "Barcelona",
-      city: "Barcelona",
-      street: "Carrer de Pujades 123",
-      bedrooms: 2,
-      bathrooms: 1,
-      area: 110,
-      propertyType: "loft",
-      occupied: false,
-      reo: false,
-      images: ["https://res.cloudinary.com/demo/image/upload/sample.jpg"],
-      features: ["Ascensor", "Aire acondicionado"],
-      agent: { name: "Administrador", phone: "+34 93 234 5678", photo: "https://randomuser.me/api/portraits/lego/1.jpg" },
-      createdAt: "2025-02-10",
-      lat: 41.3989,
-      lng: 2.1896
+  // API calls
+  const fetchProperties = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: currentPage,
+        limit: 6,
+        ...(filters.province && { province: filters.province }),
+        ...(filters.city && { city: filters.city }),
+        ...(filters.propertyType && { propertytype: filters.propertyType }),
+        ...(filters.priceMin && { priceMin: filters.priceMin }),
+        ...(filters.priceMax && { priceMax: filters.priceMax }),
+        ...(filters.bedrooms && { bedrooms: filters.bedrooms }),
+        ...(filters.bathrooms && { bathrooms: filters.bathrooms }),
+        ...(filters.occupied !== '' && { occupied: filters.occupied }),
+        ...(filters.reo !== '' && { reo: filters.reo }),
+      }).toString();
+      const response = await fetch(`${API_BASE}/properties?${params}`);
+      if (!response.ok) throw new Error('Error al cargar propiedades');
+      const data = await response.json();
+      setProperties(data.data);
+      setTotalPages(data.pagination.pages);
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setLoading(false);
     }
-  ];
+  }, [currentPage, filters]);
 
-  // Cargar datos desde localStorage
-  useEffect(() => {
-    // Usuarios
-    const storedUsers = localStorage.getItem('users');
-    if (storedUsers) {
-      setUsers(JSON.parse(storedUsers));
-    } else {
-      const defaultUsers = [{ id: 1, name: 'Administrador', email: 'admin@inmobiliaria.com', password: 'admin123', role: 'admin' }];
-      setUsers(defaultUsers);
-      localStorage.setItem('users', JSON.stringify(defaultUsers));
+  const fetchFavorites = useCallback(async () => {
+    if (!currentUser) return;
+    try {
+      const data = await authFetch('/favorites');
+      setFavorites(data.map(p => p.id));
+    } catch (error) {
+      console.error(error);
     }
+  }, [currentUser]);
 
-    // Propiedades
-    const storedProperties = localStorage.getItem('properties');
-    if (storedProperties) {
-      setProperties(JSON.parse(storedProperties));
-      setFilteredProperties(JSON.parse(storedProperties));
-    } else {
-      setProperties(mockProperties);
-      setFilteredProperties(mockProperties);
-      localStorage.setItem('properties', JSON.stringify(mockProperties));
+  const fetchUsers = useCallback(async () => {
+    if (currentUser?.role !== 'admin') return;
+    try {
+      const data = await authFetch('/users');
+      setUsers(data);
+    } catch (error) {
+      toast.error('Error al cargar usuarios');
     }
-
-    // Sesión actual
-    const storedUser = localStorage.getItem('currentUser');
-    if (storedUser) {
-      const user = JSON.parse(storedUser);
-      setCurrentUser(user);
-      setIsLoggedIn(true);
-      setView('properties');
-      const favKey = `favorites_${user.id}`;
-      const storedFav = localStorage.getItem(favKey);
-      if (storedFav) setFavorites(JSON.parse(storedFav));
-    }
-  }, []);
-
-  // Persistencia
-  useEffect(() => {
-    if (properties.length) localStorage.setItem('properties', JSON.stringify(properties));
-  }, [properties]);
-  useEffect(() => {
-    if (currentUser) {
-      const favKey = `favorites_${currentUser.id}`;
-      localStorage.setItem(favKey, JSON.stringify(favorites));
-    }
-  }, [favorites, currentUser]);
-
-  // Filtrado
-  const applyFilters = useCallback(() => {
-    let filtered = [...properties];
-    if (filters.province) filtered = filtered.filter(p => p.province === filters.province);
-    if (filters.city) filtered = filtered.filter(p => p.city === filters.city);
-    if (filters.propertyType) filtered = filtered.filter(p => p.propertyType === filters.propertyType);
-    if (filters.priceMin) filtered = filtered.filter(p => p.price >= Number(filters.priceMin));
-    if (filters.priceMax) filtered = filtered.filter(p => p.price <= Number(filters.priceMax));
-    if (filters.bedrooms) filtered = filtered.filter(p => p.bedrooms >= Number(filters.bedrooms));
-    if (filters.bathrooms) filtered = filtered.filter(p => p.bathrooms >= Number(filters.bathrooms));
-    if (filters.occupied !== '') filtered = filtered.filter(p => p.occupied === (filters.occupied === 'true'));
-    if (filters.reo !== '') filtered = filtered.filter(p => p.reo === (filters.reo === 'true'));
-    setFilteredProperties(filtered);
-    setCurrentPage(1);
-  }, [filters, properties]);
+  }, [currentUser]);
 
   useEffect(() => {
-    applyFilters();
-  }, [applyFilters]);
+    if (isLoggedIn && view === 'properties') {
+      fetchProperties();
+      fetchFavorites();
+    }
+  }, [isLoggedIn, view, currentPage, filters, fetchProperties, fetchFavorites]);
 
-  // Autenticación
-  const handleLogin = useCallback((e) => {
+  useEffect(() => {
+    if (isLoggedIn && currentUser?.role === 'admin' && view === 'adminUsers') {
+      fetchUsers();
+    }
+  }, [isLoggedIn, currentUser, view, fetchUsers]);
+
+  // Auth
+  const handleLogin = async (e) => {
     e.preventDefault();
-    const user = users.find(u => u.email === loginForm.email && u.password === loginForm.password);
-    if (user) {
-      setIsLoggedIn(true);
+    try {
+      const response = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(loginForm)
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error);
+      }
+      const { token, user } = await response.json();
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user));
       setCurrentUser(user);
-      localStorage.setItem('currentUser', JSON.stringify(user));
+      setIsLoggedIn(true);
       setView('properties');
       setErrorMessage('');
-      const favKey = `favorites_${user.id}`;
-      const storedFav = localStorage.getItem(favKey);
-      setFavorites(storedFav ? JSON.parse(storedFav) : []);
-    } else {
-      setErrorMessage('Email o contraseña incorrectos');
+      toast.success(`Bienvenido ${user.name}`);
+    } catch (error) {
+      setErrorMessage(error.message);
     }
-  }, [users, loginForm]);
+  };
 
-  const handleRegister = useCallback((e) => {
+  const handleRegister = async (e) => {
     e.preventDefault();
-    if (users.find(u => u.email === registerForm.email)) {
-      setErrorMessage('Ya existe un usuario con ese email');
-      return;
+    try {
+      const response = await fetch(`${API_BASE}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(registerForm)
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error);
+      }
+      toast.success('Registro exitoso. Ahora inicia sesión.');
+      setView('login');
+      setRegisterForm({ name: '', email: '', password: '' });
+    } catch (error) {
+      setErrorMessage(error.message);
     }
-    const newUser = {
-      id: Date.now(),
-      name: registerForm.name,
-      email: registerForm.email,
-      password: registerForm.password,
-      role: 'user'
-    };
-    const updatedUsers = [...users, newUser];
-    setUsers(updatedUsers);
-    localStorage.setItem('users', JSON.stringify(updatedUsers));
-    toast.success('Registro exitoso. Ahora inicia sesión.');
-    setView('login');
-    setRegisterForm({ name: '', email: '', password: '' });
-  }, [users, registerForm]);
+  };
 
   const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
     setIsLoggedIn(false);
     setCurrentUser(null);
-    localStorage.removeItem('currentUser');
     setFavorites([]);
     setView('login');
     setLoginForm({ email: '', password: '' });
+    toast.success('Sesión cerrada');
   };
 
-  // CRUD propiedades
-  const handlePropertySubmit = async (e) => {
-    e.preventDefault();
-    if (!propertyForm.title || !propertyForm.price || !propertyForm.province || !propertyForm.city) {
-      toast.error('Completa los campos obligatorios');
-      return;
+  // Images upload
+  const handleImageUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+    setIsUploading(true);
+    const token = localStorage.getItem('token');
+    const formData = new FormData();
+    files.forEach(file => formData.append('images', file));
+    try {
+      const response = await fetch(`${API_BASE}/upload`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData
+      });
+      if (!response.ok) throw new Error('Error al subir imágenes');
+      const { urls } = await response.json();
+      setPropertyForm(prev => ({ ...prev, images: [...prev.images, ...urls] }));
+      toast.success(`${urls.length} imagen(es) subida(s)`);
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setIsUploading(false);
     }
-    const newProperty = {
-      id: isEditing ? propertyForm.id : Date.now(),
-      ...propertyForm,
-      price: Number(propertyForm.price),
-      bedrooms: Number(propertyForm.bedrooms),
-      bathrooms: Number(propertyForm.bathrooms),
-      area: Number(propertyForm.area),
-      lat: propertyForm.lat ? Number(propertyForm.lat) : null,
-      lng: propertyForm.lng ? Number(propertyForm.lng) : null,
-      features: propertyForm.features || [],
-      agent: { name: currentUser.name, phone: "+34 600 000 000", photo: "https://randomuser.me/api/portraits/lego/1.jpg" },
-      createdAt: new Date().toLocaleDateString('es-ES')
-    };
-    let updatedProperties;
-    if (isEditing) {
-      updatedProperties = properties.map(p => p.id === newProperty.id ? newProperty : p);
-      toast.success('Propiedad actualizada');
-    } else {
-      updatedProperties = [...properties, newProperty];
-      toast.success('Propiedad publicada');
-    }
-    setProperties(updatedProperties);
-    setFilteredProperties(updatedProperties);
-    setView('properties');
-    resetPropertyForm();
+  };
+
+  const removeImage = (indexToRemove) => {
+    setPropertyForm(prev => ({
+      ...prev,
+      images: prev.images.filter((_, idx) => idx !== indexToRemove)
+    }));
   };
 
   const resetPropertyForm = () => {
@@ -675,6 +606,37 @@ function App() {
       lat: '', lng: '', images: []
     });
     setIsEditing(false);
+  };
+
+  const handlePropertySubmit = async (e) => {
+    e.preventDefault();
+    const formData = new FormData();
+    Object.keys(propertyForm).forEach(key => {
+      if (key !== 'images') {
+        formData.append(key, propertyForm[key]);
+      }
+    });
+    formData.append('images', JSON.stringify(propertyForm.images));
+    const token = localStorage.getItem('token');
+    const url = isEditing ? `${API_BASE}/properties/${propertyForm.id}` : `${API_BASE}/properties`;
+    const method = isEditing ? 'PUT' : 'POST';
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error);
+      }
+      toast.success(isEditing ? 'Propiedad actualizada' : 'Propiedad publicada');
+      setView('properties');
+      fetchProperties();
+      resetPropertyForm();
+    } catch (error) {
+      toast.error(error.message);
+    }
   };
 
   const editProperty = (property) => {
@@ -705,88 +667,49 @@ function App() {
     setShowDeleteModal(true);
   };
 
-  const deleteProperty = () => {
-    const updated = properties.filter(p => p.id !== propertyToDelete.id);
-    setProperties(updated);
-    setFilteredProperties(updated);
-    setShowDeleteModal(false);
-    setPropertyToDelete(null);
-    toast.success('Propiedad eliminada');
-  };
-
-  // Favoritos
-  const toggleFavorite = (e, propertyId) => {
-    e.stopPropagation();
-    if (favorites.includes(propertyId)) {
-      setFavorites(favorites.filter(id => id !== propertyId));
-    } else {
-      setFavorites([...favorites, propertyId]);
+  const deleteProperty = async () => {
+    try {
+      await authFetch(`/properties/${propertyToDelete.id}`, { method: 'DELETE' });
+      toast.success('Propiedad eliminada');
+      fetchProperties();
+      setShowDeleteModal(false);
+      setPropertyToDelete(null);
+    } catch (error) {
+      toast.error(error.message);
     }
   };
 
-  // Gestión de usuarios
-  const deleteUser = (userId) => {
+  const toggleFavorite = async (e, propertyId) => {
+    e.stopPropagation();
+    const isFav = favorites.includes(propertyId);
+    try {
+      if (isFav) {
+        await authFetch(`/favorites/${propertyId}`, { method: 'DELETE' });
+        setFavorites(favorites.filter(id => id !== propertyId));
+      } else {
+        await authFetch(`/favorites/${propertyId}`, { method: 'POST' });
+        setFavorites([...favorites, propertyId]);
+      }
+    } catch (error) {
+      toast.error(error.message);
+    }
+  };
+
+  const deleteUser = async (userId) => {
     if (userId === currentUser?.id) {
       toast.error('No puedes eliminarte a ti mismo');
       return;
     }
-    const updatedUsers = users.filter(u => u.id !== userId);
-    setUsers(updatedUsers);
-    localStorage.setItem('users', JSON.stringify(updatedUsers));
-    toast.success('Usuario eliminado');
-  };
-
-  // Subida de imágenes
-  const uploadImage = async (file) => {
-    if (!CLOUD_NAME || CLOUD_NAME === 'YOUR_CLOUD_NAME') {
-      return URL.createObjectURL(file);
-    }
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('upload_preset', UPLOAD_PRESET);
     try {
-      const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
-        method: 'POST',
-        body: formData
-      });
-      const data = await response.json();
-      return data.secure_url;
+      await authFetch(`/users/${userId}`, { method: 'DELETE' });
+      setUsers(users.filter(u => u.id !== userId));
+      toast.success('Usuario eliminado');
     } catch (error) {
-      toast.error('Error al subir la imagen');
-      return null;
+      toast.error(error.message);
     }
-  };
-
-  const handleImageUpload = async (e) => {
-    const files = Array.from(e.target.files);
-    setIsUploading(true);
-    toast.loading('Subiendo imágenes...', { id: 'upload' });
-    const uploadedUrls = [];
-    for (const file of files) {
-      const url = await uploadImage(file);
-      if (url) uploadedUrls.push(url);
-    }
-    setIsUploading(false);
-    toast.dismiss('upload');
-    if (uploadedUrls.length > 0) {
-      toast.success(`${uploadedUrls.length} imagen(es) subida(s)`);
-      setPropertyForm(prev => ({ ...prev, images: [...prev.images, ...uploadedUrls] }));
-    } else if (files.length > 0) {
-      toast.error('No se pudieron subir las imágenes');
-    }
-  };
-
-  const removeImage = (indexToRemove) => {
-    setPropertyForm(prev => ({
-      ...prev,
-      images: prev.images.filter((_, idx) => idx !== indexToRemove)
-    }));
   };
 
   const formatPrice = (price) => `€${price.toLocaleString('es-ES')}`;
-
-  // Paginación (totalPages usado en PropertiesView)
-  const totalPages = Math.ceil(filteredProperties.length / itemsPerPage);
 
   return (
     <div className="app">
@@ -796,11 +719,9 @@ function App() {
           <h1 className="logo" onClick={() => isLoggedIn && setView('properties')}>🏠 idealista</h1>
           {isLoggedIn && (
             <div className="nav-buttons">
+              <button onClick={() => { resetPropertyForm(); setView('upload'); }} className="publish-btn">Publicar</button>
               {currentUser?.role === 'admin' && (
-                <>
-                  <button onClick={() => { resetPropertyForm(); setView('upload'); }} className="publish-btn">Publicar</button>
-                  <button onClick={() => setView('adminUsers')} className="admin-users-btn">Usuarios</button>
-                </>
+                <button onClick={() => setView('adminUsers')} className="admin-users-btn">Usuarios</button>
               )}
               <button onClick={handleLogout} className="logout-btn">Salir</button>
             </div>
@@ -809,78 +730,39 @@ function App() {
       </nav>
       <main>
         {!isLoggedIn && view === 'login' && (
-          <LoginView
-            loginForm={loginForm}
-            setLoginForm={setLoginForm}
-            handleLogin={handleLogin}
-            errorMessage={errorMessage}
-            setView={setView}
-          />
+          <LoginView loginForm={loginForm} setLoginForm={setLoginForm} handleLogin={handleLogin} errorMessage={errorMessage} setView={setView} />
         )}
         {!isLoggedIn && view === 'register' && (
-          <RegisterView
-            registerForm={registerForm}
-            setRegisterForm={setRegisterForm}
-            handleRegister={handleRegister}
-            errorMessage={errorMessage}
-            setView={setView}
-          />
+          <RegisterView registerForm={registerForm} setRegisterForm={setRegisterForm} handleRegister={handleRegister} errorMessage={errorMessage} setView={setView} />
         )}
         {isLoggedIn && view === 'upload' && (
           <UploadView
-            propertyForm={propertyForm}
-            setPropertyForm={setPropertyForm}
-            handlePropertySubmit={handlePropertySubmit}
-            isEditing={isEditing}
-            isUploading={isUploading}
-            handleImageUpload={handleImageUpload}
-            removeImage={removeImage}
-            resetPropertyForm={resetPropertyForm}
-            setView={setView}
-            provincesSpain={provincesSpain}
-            citiesByProvinceSpain={citiesByProvinceSpain}
+            propertyForm={propertyForm} setPropertyForm={setPropertyForm} handlePropertySubmit={handlePropertySubmit}
+            isEditing={isEditing} isUploading={isUploading} handleImageUpload={handleImageUpload} removeImage={removeImage}
+            resetPropertyForm={resetPropertyForm} setView={setView} provincesSpain={provincesSpain} citiesByProvinceSpain={citiesByProvinceSpain}
           />
         )}
         {isLoggedIn && view === 'properties' && (
           <PropertiesView
-            filters={filters}
-            setFilters={setFilters}
-            filteredProperties={filteredProperties}
-            currentPage={currentPage}
-            setCurrentPage={setCurrentPage}
-            totalPages={totalPages}
-            favorites={favorites}
-            toggleFavorite={toggleFavorite}
-            setSelectedProperty={setSelectedProperty}
-            setView={setView}
-            currentUser={currentUser}
-            editProperty={editProperty}
-            confirmDelete={confirmDelete}
-            provincesSpain={provincesSpain}
-            citiesByProvinceSpain={citiesByProvinceSpain}
-            formatPrice={formatPrice}
+            filters={filters} setFilters={setFilters} properties={properties} loading={loading}
+            currentPage={currentPage} setCurrentPage={setCurrentPage} totalPages={totalPages}
+            favorites={favorites} toggleFavorite={toggleFavorite} setSelectedProperty={setSelectedProperty}
+            setView={setView} currentUser={currentUser} editProperty={editProperty} confirmDelete={confirmDelete}
+            provincesSpain={provincesSpain} citiesByProvinceSpain={citiesByProvinceSpain} formatPrice={formatPrice}
           />
         )}
         {isLoggedIn && view === 'detail' && (
-          <DetailView
-            selectedProperty={selectedProperty}
-            setView={setView}
-            formatPrice={formatPrice}
-          />
+          <DetailView selectedProperty={selectedProperty} setView={setView} formatPrice={formatPrice} />
         )}
         {isLoggedIn && view === 'adminUsers' && currentUser?.role === 'admin' && (
-          <AdminUsersView
-            users={users}
-            deleteUser={deleteUser}
-            setView={setView}
-          />
+          <AdminUsersView users={users} deleteUser={deleteUser} setView={setView} />
         )}
       </main>
       {showDeleteModal && (
         <div className="modal-overlay" onClick={() => setShowDeleteModal(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h3>¿Eliminar propiedad?</h3>
-            <p>¿Estás seguro de que quieres eliminar "{propertyToDelete?.title}"? Esta acción no se puede deshacer.</p>
+            <p>¿Estás seguro de que quieres eliminar "{propertyToDelete?.title}"?</p>
             <div className="modal-buttons">
               <button onClick={() => setShowDeleteModal(false)}>Cancelar</button>
               <button onClick={deleteProperty} className="btn-danger">Eliminar</button>
