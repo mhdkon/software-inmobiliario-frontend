@@ -7,8 +7,6 @@ import './App.css';
 // ========================================================
 // CONFIGURACIÓN DE LA API - PRODUCCIÓN
 // ========================================================
-// Para Vite usa import.meta.env
-// Para Create React App usa process.env
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 const authFetch = async (endpoint, options = {}) => {
@@ -367,17 +365,27 @@ const UploadView = ({
         <div className="form-group"><label>Longitud (opcional)</label><input type="number" step="any" placeholder="-3.7038" value={propertyForm.lng} onChange={(e) => setPropertyForm({...propertyForm, lng: e.target.value})} /></div>
       </div>
       <div className="form-group">
-        <label>Fotos</label>
-        <input type="file" multiple accept="image/*" onChange={handleImageUpload} className="file-input" disabled={isUploading} />
+        <label>Fotos (máximo 10 imágenes)</label>
+        <input 
+          type="file" 
+          multiple 
+          accept="image/*" 
+          onChange={handleImageUpload} 
+          className="file-input" 
+          disabled={isUploading || (propertyForm.images && propertyForm.images.length >= 10)}
+        />
         {isUploading && <p className="upload-status">Subiendo imágenes...</p>}
-        {propertyForm.images.length > 0 && (
+        {propertyForm.images && propertyForm.images.length > 0 && (
           <div className="image-preview">
-            {propertyForm.images.map((url, idx) => (
-              <div key={idx} className="image-preview-item">
-                <img src={getImageUrl(url)} alt="preview" style={{ width: '100px', height: '100px', objectFit: 'cover' }} />
-                <button type="button" onClick={() => removeImage(idx)} className="remove-image">×</button>
-              </div>
-            ))}
+            <p>✅ Imágenes cargadas: {propertyForm.images.length}/10</p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '10px' }}>
+              {propertyForm.images.map((url, idx) => (
+                <div key={idx} className="image-preview-item" style={{ position: 'relative' }}>
+                  <img src={getImageUrl(url)} alt={`preview-${idx}`} style={{ width: '100%', height: '100px', objectFit: 'cover', borderRadius: '4px' }} />
+                  <button type="button" onClick={() => removeImage(idx)} className="remove-image" style={{ position: 'absolute', top: '5px', right: '5px', background: 'red', color: 'white', border: 'none', borderRadius: '50%', width: '24px', height: '24px', cursor: 'pointer' }}>✕</button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -389,14 +397,15 @@ const UploadView = ({
   </div>
 );
 
-// PropertiesView con filtros colapsables (mejora móvil)
 const PropertiesView = ({
   filters, setFilters, properties, loading, currentPage, setCurrentPage, totalPages,
   favorites, toggleFavorite, setSelectedProperty, setView, currentUser, editProperty, confirmDelete,
   provincesSpain, citiesByProvinceSpain, formatPrice
 }) => {
   const [showFilters, setShowFilters] = useState(false);
-  const paginatedProperties = properties.slice((currentPage - 1) * 6, currentPage * 6);
+  
+  const safeProperties = Array.isArray(properties) ? properties : [];
+  const paginatedProperties = safeProperties.slice((currentPage - 1) * 6, currentPage * 6);
   
   const hasActiveFilters = Object.values(filters).some(v => v !== '' && v !== false);
   
@@ -482,7 +491,7 @@ const PropertiesView = ({
         
         {loading && <p className="loading-text">Cargando propiedades...</p>}
         <div className="results-count">
-          {properties.length} propiedades encontradas
+          {safeProperties.length} propiedades encontradas
           {hasActiveFilters && (
             <button className="clear-filters-link" onClick={() => setFilters({province: '', city: '', propertyType: '', priceMin: '', priceMax: '', bedrooms: '', bathrooms: '', occupied: '', reo: ''})}>
               Limpiar filtros
@@ -492,35 +501,39 @@ const PropertiesView = ({
       </div>
 
       <div className="properties-grid">
-        {paginatedProperties.map(property => (
-          <div key={property.id} className="property-card" onClick={() => { setSelectedProperty(property); setView('detail'); }}>
-            <div className="card-image">
-              <img src={getImageUrl(property.images?.[0])} alt={property.title} style={{ width: '100%', height: '200px', objectFit: 'cover' }} />
-              <button className={`favorite-btn ${favorites.includes(property.id) ? 'active' : ''}`} onClick={(e) => toggleFavorite(e, property.id)}>
-                {favorites.includes(property.id) ? '♥' : '♡'}
-              </button>
-              <span className="property-type">{property.propertyType}</span>
-              {(currentUser?.role === 'admin' || currentUser?.id === property.user_id) && (
-                <div className="card-actions">
-                  <button onClick={(e) => { e.stopPropagation(); editProperty(property); }} className="edit-btn">✎</button>
-                  <button onClick={(e) => { e.stopPropagation(); confirmDelete(property); }} className="delete-btn">✕</button>
+        {paginatedProperties.length > 0 ? (
+          paginatedProperties.map(property => (
+            <div key={property.id} className="property-card" onClick={() => { setSelectedProperty(property); setView('detail'); }}>
+              <div className="card-image">
+                <img src={getImageUrl(property.images?.[0])} alt={property.title} style={{ width: '100%', height: '200px', objectFit: 'cover' }} />
+                <button className={`favorite-btn ${favorites.includes(property.id) ? 'active' : ''}`} onClick={(e) => toggleFavorite(e, property.id)}>
+                  {favorites.includes(property.id) ? '♥' : '♡'}
+                </button>
+                <span className="property-type">{property.propertyType}</span>
+                {(currentUser?.role === 'admin' || currentUser?.id === property.user_id) && (
+                  <div className="card-actions">
+                    <button onClick={(e) => { e.stopPropagation(); editProperty(property); }} className="edit-btn">✎</button>
+                    <button onClick={(e) => { e.stopPropagation(); confirmDelete(property); }} className="delete-btn">✕</button>
+                  </div>
+                )}
+              </div>
+              <div className="card-content">
+                <h3>{property.title}</h3>
+                <p className="location">{property.city}, {property.province}</p>
+                <p className="price">{formatPrice(property.price)}</p>
+                <div className="features">
+                  <span>{property.bedrooms} hab</span>
+                  <span>{property.bathrooms} baños</span>
+                  <span>{property.area} m²</span>
+                  {property.occupied && <span>Ocupado</span>}
+                  {property.reo && <span>REO</span>}
                 </div>
-              )}
-            </div>
-            <div className="card-content">
-              <h3>{property.title}</h3>
-              <p className="location">{property.city}, {property.province}</p>
-              <p className="price">{formatPrice(property.price)}</p>
-              <div className="features">
-                <span>{property.bedrooms} hab</span>
-                <span>{property.bathrooms} baños</span>
-                <span>{property.area} m²</span>
-                {property.occupied && <span>Ocupado</span>}
-                {property.reo && <span>REO</span>}
               </div>
             </div>
-          </div>
-        ))}
+          ))
+        ) : (
+          <p style={{ gridColumn: '1/-1', textAlign: 'center', padding: '2rem' }}>No hay propiedades disponibles</p>
+        )}
       </div>
 
       {totalPages > 1 && (
@@ -535,6 +548,10 @@ const PropertiesView = ({
 };
 
 const DetailView = ({ selectedProperty, setView, formatPrice }) => {
+  if (!selectedProperty) {
+    return <div>Propiedad no encontrada</div>;
+  }
+  
   const direccion = `${selectedProperty.street}, ${selectedProperty.city}, ${selectedProperty.province}`;
   return (
     <div className="detail-page">
@@ -614,20 +631,20 @@ function App() {
   const [propertyForm, setPropertyForm] = useState({
     id: null, title: '', description: '', price: '', province: '', city: '', street: '',
     bedrooms: '', bathrooms: '', area: '', propertyType: 'casa', occupied: false, reo: false,
-    lat: '', lng: '', images: []
+    lat: '', lng: '', images: [], imageFiles: []
   });
   const [isEditing, setIsEditing] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [propertyToDelete, setPropertyToDelete] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  // API calls
+  // ========================================================
+  // API CALLS
+  // ========================================================
   const fetchProperties = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams({
-        page: currentPage,
-        limit: 6,
         ...(filters.province && { province: filters.province }),
         ...(filters.city && { city: filters.city }),
         ...(filters.propertyType && { propertytype: filters.propertyType }),
@@ -638,25 +655,35 @@ function App() {
         ...(filters.occupied !== '' && { occupied: filters.occupied }),
         ...(filters.reo !== '' && { reo: filters.reo }),
       }).toString();
+      
       const response = await fetch(`${API_BASE}/properties?${params}`);
       if (!response.ok) throw new Error('Error al cargar propiedades');
       const data = await response.json();
-      setProperties(data.data);
-      setTotalPages(data.pagination.pages);
+      
+      const propertiesArray = Array.isArray(data) ? data : data.data || [];
+      setProperties(propertiesArray);
+      
+      const itemsPerPage = 6;
+      setTotalPages(Math.ceil(propertiesArray.length / itemsPerPage));
+      setCurrentPage(1);
     } catch (error) {
+      console.error('Error en fetchProperties:', error);
       toast.error(error.message);
+      setProperties([]);
+      setTotalPages(1);
     } finally {
       setLoading(false);
     }
-  }, [currentPage, filters]);
+  }, [filters]);
 
   const fetchFavorites = useCallback(async () => {
     if (!currentUser) return;
     try {
       const data = await authFetch('/favorites');
-      setFavorites(data.map(p => p.id));
+      const favArray = Array.isArray(data) ? data : [];
+      setFavorites(favArray.map(p => p.id));
     } catch (error) {
-      console.error(error);
+      console.error('Error en fetchFavorites:', error);
     }
   }, [currentUser]);
 
@@ -664,7 +691,7 @@ function App() {
     if (currentUser?.role !== 'admin') return;
     try {
       const data = await authFetch('/users');
-      setUsers(data);
+      setUsers(Array.isArray(data) ? data : []);
     } catch (error) {
       toast.error('Error al cargar usuarios');
     }
@@ -675,7 +702,7 @@ function App() {
       fetchProperties();
       fetchFavorites();
     }
-  }, [isLoggedIn, view, currentPage, filters, fetchProperties, fetchFavorites]);
+  }, [isLoggedIn, view, filters, fetchProperties, fetchFavorites]);
 
   useEffect(() => {
     if (isLoggedIn && currentUser?.role === 'admin' && view === 'adminUsers') {
@@ -683,7 +710,9 @@ function App() {
     }
   }, [isLoggedIn, currentUser, view, fetchUsers]);
 
-  // Auth
+  // ========================================================
+  // AUTENTICACIÓN
+  // ========================================================
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
@@ -749,74 +778,139 @@ function App() {
     setShowLogoutConfirm(false);
   };
 
-  // Images upload
+  // ========================================================
+  // MANEJO DE IMÁGENES
+  // ========================================================
   const handleImageUpload = async (e) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
-    setIsUploading(true);
-    const token = localStorage.getItem('token');
-    const formData = new FormData();
-    files.forEach(file => formData.append('images', file));
+    
+    const currentImageCount = (propertyForm.images || []).length;
+    if (currentImageCount + files.length > 10) {
+      toast.error(`Máximo 10 imágenes. Ya tienes ${currentImageCount}`);
+      return;
+    }
+    
     try {
-      const response = await fetch(`${API_BASE}/upload`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: formData
-      });
-      if (!response.ok) throw new Error('Error al subir imágenes');
-      const { urls } = await response.json();
-      setPropertyForm(prev => ({ ...prev, images: [...prev.images, ...urls] }));
-      toast.success(`${urls.length} imagen(es) subida(s)`);
+      const base64Promises = files.map(file => 
+        new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        })
+      );
+      const base64Images = await Promise.all(base64Promises);
+      
+      setPropertyForm(prev => ({ 
+        ...prev, 
+        images: [...(prev.images || []), ...base64Images],
+        imageFiles: [...(prev.imageFiles || []), ...files]
+      }));
+      
+      console.log(`✅ ${files.length} imagen(es) cargada(s)`);
+      console.log(`   Total imágenes: ${currentImageCount + files.length}/10`);
+      toast.success(`${files.length} imagen(es) cargada(s)`);
     } catch (error) {
-      toast.error(error.message);
-    } finally {
-      setIsUploading(false);
+      console.error('❌ Error en handleImageUpload:', error);
+      toast.error('Error al cargar imágenes');
     }
   };
 
   const removeImage = (indexToRemove) => {
     setPropertyForm(prev => ({
       ...prev,
-      images: prev.images.filter((_, idx) => idx !== indexToRemove)
+      images: (prev.images || []).filter((_, idx) => idx !== indexToRemove),
+      imageFiles: (prev.imageFiles || []).filter((_, idx) => idx !== indexToRemove)
     }));
+    console.log(`🗑️ Imagen ${indexToRemove} eliminada`);
   };
 
   const resetPropertyForm = () => {
     setPropertyForm({
       id: null, title: '', description: '', price: '', province: '', city: '', street: '',
       bedrooms: '', bathrooms: '', area: '', propertyType: 'casa', occupied: false, reo: false,
-      lat: '', lng: '', images: []
+      lat: '', lng: '', images: [], imageFiles: []
     });
     setIsEditing(false);
   };
 
+  // ========================================================
+  // PROPIEDADES
+  // ========================================================
   const handlePropertySubmit = async (e) => {
     e.preventDefault();
+    
+    console.log('📤 Iniciando envío de propiedad...');
+    console.log(`   Imágenes en preview: ${propertyForm.images.length}`);
+    console.log(`   Archivos reales: ${propertyForm.imageFiles.length}`);
+    
     const formData = new FormData();
-    Object.keys(propertyForm).forEach(key => {
-      if (key !== 'images') {
-        formData.append(key, propertyForm[key]);
-      }
-    });
-    formData.append('images', JSON.stringify(propertyForm.images));
+    formData.append('title', propertyForm.title);
+    formData.append('description', propertyForm.description);
+    formData.append('price', propertyForm.price);
+    formData.append('province', propertyForm.province);
+    formData.append('city', propertyForm.city);
+    formData.append('street', propertyForm.street);
+    formData.append('bedrooms', propertyForm.bedrooms);
+    formData.append('bathrooms', propertyForm.bathrooms);
+    formData.append('area', propertyForm.area);
+    formData.append('propertytype', propertyForm.propertyType);
+    formData.append('occupied', propertyForm.occupied);
+    formData.append('reo', propertyForm.reo);
+    formData.append('lat', propertyForm.lat || '0');
+    formData.append('lng', propertyForm.lng || '0');
+    
+    if (propertyForm.imageFiles && propertyForm.imageFiles.length > 0) {
+      console.log(`📁 Añadiendo ${propertyForm.imageFiles.length} archivo(s) a FormData:`);
+      propertyForm.imageFiles.forEach((file, idx) => {
+        console.log(`   ${idx + 1}. ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+        formData.append('images', file);
+      });
+    } else {
+      console.warn('⚠️ ¡ATENCIÓN! No hay archivos para enviar');
+    }
+    
     const token = localStorage.getItem('token');
     const url = isEditing ? `${API_BASE}/properties/${propertyForm.id}` : `${API_BASE}/properties`;
     const method = isEditing ? 'PUT' : 'POST';
+    
     try {
+      console.log(`📤 Enviando ${method} a: ${url}`);
+      
       const response = await fetch(url, {
         method,
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { 
+          'Authorization': `Bearer ${token}`
+        },
         body: formData
       });
+      
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error);
+        console.error('❌ Error del servidor:', error);
+        throw new Error(error.error || `Error ${response.status}`);
       }
+      
+      const responseData = await response.json();
+      console.log('✅ Respuesta del servidor:', responseData);
+      
+      if (responseData.images) {
+        console.log(`📸 Imágenes subidas a Cloudinary:`);
+        const imageArray = Array.isArray(responseData.images) ? responseData.images : JSON.parse(responseData.images || '[]');
+        imageArray.forEach((url, idx) => {
+          console.log(`   ${idx + 1}. ${url}`);
+        });
+      } else {
+        console.warn('⚠️ No hay imágenes en la respuesta');
+      }
+      
       toast.success(isEditing ? 'Propiedad actualizada' : 'Propiedad publicada');
       setView('properties');
       fetchProperties();
       resetPropertyForm();
     } catch (error) {
+      console.error('❌ Error en handlePropertySubmit:', error);
       toast.error(error.message);
     }
   };
@@ -833,12 +927,13 @@ function App() {
       bedrooms: property.bedrooms,
       bathrooms: property.bathrooms,
       area: property.area,
-      propertyType: property.propertyType,
+      propertyType: property.propertytype || property.propertyType,
       occupied: property.occupied,
       reo: property.reo,
       lat: property.lat || '',
       lng: property.lng || '',
-      images: property.images || []
+      images: property.images || [],
+      imageFiles: []
     });
     setIsEditing(true);
     setView('upload');
@@ -891,8 +986,137 @@ function App() {
     }
   };
 
-  const formatPrice = (price) => `€${price.toLocaleString('es-ES')}`;
+  const formatPrice = (price) => {
+    if (typeof price !== 'number') price = parseFloat(price);
+    return `€${price.toLocaleString('es-ES')}`;
+  };
 
+// ========================================================
+// COMPONENTE DE GALERÍA CON CARRUSEL
+// ========================================================
+const GalleryCarousel = ({ images }) => {
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  
+  if (!images || images.length === 0) {
+    return (
+      <div className="gallery-carousel">
+        <img src="https://via.placeholder.com/600x400?text=Sin+imagen" alt="placeholder" />
+      </div>
+    );
+  }
+
+  const handlePrevious = () => {
+    setCurrentImageIndex((prev) => (prev === 0 ? images.length - 1 : prev - 1));
+  };
+
+  const handleNext = () => {
+    setCurrentImageIndex((prev) => (prev === images.length - 1 ? 0 : prev + 1));
+  };
+
+  return (
+    <div className="gallery-carousel">
+      <div className="carousel-container">
+        <img 
+          src={getImageUrl(images[currentImageIndex])} 
+          alt={`Imagen ${currentImageIndex + 1}`}
+          className="carousel-image"
+        />
+        
+        {images.length > 1 && (
+          <>
+            <button className="carousel-btn prev-btn" onClick={handlePrevious}>
+              ❮
+            </button>
+            <button className="carousel-btn next-btn" onClick={handleNext}>
+              ❯
+            </button>
+            
+            <div className="carousel-indicators">
+              {images.map((_, idx) => (
+                <button
+                  key={idx}
+                  className={`indicator ${idx === currentImageIndex ? 'active' : ''}`}
+                  onClick={() => setCurrentImageIndex(idx)}
+                  title={`Imagen ${idx + 1}`}
+                />
+              ))}
+            </div>
+            
+            <div className="carousel-counter">
+              {currentImageIndex + 1} / {images.length}
+            </div>
+          </>
+        )}
+      </div>
+      
+      {/* Miniaturas */}
+      {images.length > 1 && (
+        <div className="carousel-thumbnails">
+          {images.map((img, idx) => (
+            <button
+              key={idx}
+              className={`thumbnail ${idx === currentImageIndex ? 'active' : ''}`}
+              onClick={() => setCurrentImageIndex(idx)}
+            >
+              <img src={getImageUrl(img)} alt={`Thumb ${idx + 1}`} />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ========================================================
+// ACTUALIZAR DetailView PARA USAR LA GALERÍA
+// ========================================================
+const DetailView = ({ selectedProperty, setView, formatPrice }) => {
+  if (!selectedProperty) {
+    return <div>Propiedad no encontrada</div>;
+  }
+  
+  const direccion = `${selectedProperty.street}, ${selectedProperty.city}, ${selectedProperty.province}`;
+  
+  // ✅ Parsear imágenes si es string
+  const images = typeof selectedProperty.images === 'string' 
+    ? JSON.parse(selectedProperty.images || '[]')
+    : (Array.isArray(selectedProperty.images) ? selectedProperty.images : []);
+  
+  return (
+    <div className="detail-page">
+      <button className="back-btn" onClick={() => setView('properties')}>← Volver</button>
+      <div className="detail-content">
+        <div className="detail-gallery">
+          {/* ✅ USAR LA GALERÍA AQUÍ */}
+          <GalleryCarousel images={images} />
+        </div>
+        <div className="detail-info">
+          <h1>{selectedProperty.title}</h1>
+          <p className="detail-location">{selectedProperty.street}, {selectedProperty.city}, {selectedProperty.province}</p>
+          <p className="detail-price">{formatPrice(selectedProperty.price)}</p>
+          <div className="detail-features">
+            <div className="feature"><span className="feature-label">Habitaciones</span><span className="feature-value">{selectedProperty.bedrooms}</span></div>
+            <div className="feature"><span className="feature-label">Baños</span><span className="feature-value">{selectedProperty.bathrooms}</span></div>
+            <div className="feature"><span className="feature-label">Superficie</span><span className="feature-value">{selectedProperty.area} m²</span></div>
+            <div className="feature"><span className="feature-label">Ocupado</span><span className="feature-value">{selectedProperty.occupied ? 'Sí' : 'No'}</span></div>
+            <div className="feature"><span className="feature-label">REO</span><span className="feature-value">{selectedProperty.reo ? 'Sí' : 'No'}</span></div>
+          </div>
+          <h3>Descripción</h3>
+          <p className="detail-description">{selectedProperty.description}</p>
+          <MapaIframe lat={selectedProperty.lat} lng={selectedProperty.lng} direccion={direccion} />
+          <p className="detail-date">Publicado: {new Date(selectedProperty.createdAt).toLocaleDateString()}</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
+
+
+  // ========================================================
+  // RENDER
+  // ========================================================
   return (
     <div className="app">
       <Toaster position="top-right" />
@@ -933,18 +1157,18 @@ function App() {
             provincesSpain={provincesSpain} citiesByProvinceSpain={citiesByProvinceSpain} formatPrice={formatPrice}
           />
         )}
-        {isLoggedIn && view === 'detail' && (
+        {isLoggedIn && view === 'detail' && selectedProperty && (
           <DetailView selectedProperty={selectedProperty} setView={setView} formatPrice={formatPrice} />
         )}
         {isLoggedIn && view === 'adminUsers' && currentUser?.role === 'admin' && (
           <AdminUsersView users={users} deleteUser={deleteUser} setView={setView} />
         )}
       </main>
-      {showDeleteModal && (
+      {showDeleteModal && propertyToDelete && (
         <div className="modal-overlay" onClick={() => setShowDeleteModal(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h3>¿Eliminar propiedad?</h3>
-            <p>¿Estás seguro de que quieres eliminar "{propertyToDelete?.title}"?</p>
+            <p>¿Estás seguro de que quieres eliminar "{propertyToDelete.title}"?</p>
             <div className="modal-buttons">
               <button onClick={() => setShowDeleteModal(false)}>Cancelar</button>
               <button onClick={deleteProperty} className="btn-danger">Eliminar</button>
