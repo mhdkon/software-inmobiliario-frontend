@@ -5,9 +5,11 @@ import toast, { Toaster } from 'react-hot-toast';
 import './App.css';
 
 // ========================================================
-// CONFIGURACIÓN DE LA API
+// CONFIGURACIÓN DE LA API - PRODUCCIÓN
 // ========================================================
-const API_BASE = 'http://localhost:3000/api';
+// Para Vite usa import.meta.env
+// Para Create React App usa process.env
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 const authFetch = async (endpoint, options = {}) => {
   const token = localStorage.getItem('token');
@@ -50,7 +52,10 @@ const citiesByProvinceSpain = {
 const getImageUrl = (src) => {
   if (!src) return 'https://via.placeholder.com/400x200?text=Sin+imagen';
   if (src.startsWith('data:image')) return src;
-  if (src.startsWith('/uploads/')) return `http://localhost:3000${src}`;
+  if (src.startsWith('/uploads/')) {
+    const baseUrl = API_BASE.replace('/api', '');
+    return `${baseUrl}${src}`;
+  }
   if (src.startsWith('http')) return src;
   return 'https://via.placeholder.com/400x200?text=Sin+imagen';
 };
@@ -66,7 +71,7 @@ const MapaIframe = ({ lat, lng, direccion }) => {
     const addressEncoded = encodeURIComponent(direccion);
     mapSrc = `https://www.google.com/maps?q=${addressEncoded}&output=embed`;
   } else {
-    return <div className="map-placeholder">📍 Ubicación no disponible</div>;
+    return <div className="map-placeholder">Ubicación no disponible</div>;
   }
   return (
     <div className="detail-map">
@@ -86,61 +91,228 @@ const MapaIframe = ({ lat, lng, direccion }) => {
 };
 
 // ========================================================
-// COMPONENTES DE VISTA
+// MODAL DE CONFIRMACIÓN DE LOGOUT
 // ========================================================
-
-const LoginView = ({ loginForm, setLoginForm, handleLogin, errorMessage, setView }) => (
-  <div className="login-container">
-    <div className="login-card">
-      <h1 className="logo">🏠 idealista</h1>
-      <h2>Bienvenido</h2>
-      <p>Inicia sesión o regístrate</p>
-      <form onSubmit={handleLogin}>
-        <div className="form-group">
-          <label>Email</label>
-          <input type="email" placeholder="email@ejemplo.com" value={loginForm.email} onChange={(e) => setLoginForm({...loginForm, email: e.target.value})} required />
-        </div>
-        <div className="form-group">
-          <label>Contraseña</label>
-          <input type="password" placeholder="••••••••" value={loginForm.password} onChange={(e) => setLoginForm({...loginForm, password: e.target.value})} required />
-        </div>
-        {errorMessage && <p className="error-message">{errorMessage}</p>}
-        <button type="submit" className="login-button">Iniciar sesión</button>
-      </form>
-      <p className="register-link">¿No tienes cuenta? <button onClick={() => setView('register')} className="link-button">Regístrate</button></p>
-      <div className="demo-box">
-        <p><strong>Demo admin:</strong> admin@inmobiliaria.com / admin123</p>
-        <p><strong>Demo usuario:</strong> regístrate con email y contraseña</p>
+const LogoutConfirmModal = ({ onConfirm, onCancel }) => (
+  <div className="modal-overlay" onClick={onCancel}>
+    <div className="modal logout-modal" onClick={e => e.stopPropagation()}>
+      <div className="modal-header">
+        <h3>Confirmar cierre de sesión</h3>
+      </div>
+      <div className="modal-body">
+        <p>¿Estás seguro de que deseas cerrar sesión? Tendrás que iniciar sesión nuevamente para acceder.</p>
+      </div>
+      <div className="modal-buttons logout-buttons">
+        <button onClick={onCancel} className="btn-cancel">Cancelar</button>
+        <button onClick={onConfirm} className="btn-logout">Cerrar sesión</button>
       </div>
     </div>
   </div>
 );
 
-const RegisterView = ({ registerForm, setRegisterForm, handleRegister, errorMessage, setView }) => (
-  <div className="login-container">
-    <div className="login-card">
-      <h1 className="logo">🏠 idealista</h1>
-      <h2>Crear cuenta</h2>
-      <form onSubmit={handleRegister}>
-        <div className="form-group">
-          <label>Nombre</label>
-          <input type="text" placeholder="Tu nombre" value={registerForm.name} onChange={(e) => setRegisterForm({...registerForm, name: e.target.value})} required />
+// ========================================================
+// COMPONENTES DE VISTA
+// ========================================================
+
+const LoginView = ({ loginForm, setLoginForm, handleLogin, errorMessage, setView }) => {
+  const [showPassword, setShowPassword] = useState(false);
+  const [emailFocused, setEmailFocused] = useState(false);
+  const [passwordFocused, setPasswordFocused] = useState(false);
+
+  return (
+    <div className="login-container">
+      <div className="login-background">
+        <div className="bg-circle bg-circle-1"></div>
+        <div className="bg-circle bg-circle-2"></div>
+        <div className="bg-circle bg-circle-3"></div>
+      </div>
+
+      <div className="login-card">
+        <div className="login-header">
+          <div className="logo-animated">●</div>
+          <h1 className="logo-text">CasaDirecta360</h1>
+          <p className="logo-subtitle">La mejor plataforma de inmuebles</p>
         </div>
-        <div className="form-group">
-          <label>Email</label>
-          <input type="email" placeholder="email@ejemplo.com" value={registerForm.email} onChange={(e) => setRegisterForm({...registerForm, email: e.target.value})} required />
+
+        <div className="login-form-section">
+          <h2>Iniciar sesión</h2>
+          <p className="login-description">Accede a tu cuenta para continuar</p>
+
+          <form onSubmit={handleLogin} className="login-form">
+            <div className={`form-group-enhanced ${emailFocused ? 'focused' : ''} ${loginForm.email ? 'filled' : ''}`}>
+              <div className="input-wrapper">
+                <span className="input-icon">✓</span>
+                <input
+                  type="email"
+                  placeholder="usuario@ejemplo.com"
+                  value={loginForm.email}
+                  onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
+                  onFocus={() => setEmailFocused(true)}
+                  onBlur={() => setEmailFocused(false)}
+                  required
+                  className="input-field"
+                />
+                <label className="input-label">Email</label>
+              </div>
+              <div className="input-line"></div>
+            </div>
+
+            <div className={`form-group-enhanced ${passwordFocused ? 'focused' : ''} ${loginForm.password ? 'filled' : ''}`}>
+              <div className="input-wrapper">
+                <span className="input-icon">◆</span>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Tu contraseña"
+                  value={loginForm.password}
+                  onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                  onFocus={() => setPasswordFocused(true)}
+                  onBlur={() => setPasswordFocused(false)}
+                  required
+                  className="input-field"
+                />
+                <label className="input-label">Contraseña</label>
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? '●' : '○'}
+                </button>
+              </div>
+              <div className="input-line"></div>
+            </div>
+
+            {errorMessage && (
+              <div className="error-alert">
+                <span className="error-icon">!</span>
+                <p>{errorMessage}</p>
+              </div>
+            )}
+
+            <button type="submit" className="login-button-enhanced">
+              <span className="button-text">Iniciar sesión</span>
+              <span className="button-icon">→</span>
+            </button>
+          </form>
         </div>
-        <div className="form-group">
-          <label>Contraseña</label>
-          <input type="password" placeholder="Mínimo 6 caracteres" value={registerForm.password} onChange={(e) => setRegisterForm({...registerForm, password: e.target.value})} required minLength="6" />
+
+        <div className="login-footer">
+          <p>¿No tienes cuenta? <button onClick={() => setView('register')} className="link-button-enhanced">Regístrate aquí</button></p>
         </div>
-        {errorMessage && <p className="error-message">{errorMessage}</p>}
-        <button type="submit" className="login-button">Registrarse</button>
-      </form>
-      <p className="register-link">¿Ya tienes cuenta? <button onClick={() => setView('login')} className="link-button">Inicia sesión</button></p>
+      </div>
     </div>
-  </div>
-);
+  );
+};
+
+const RegisterView = ({ registerForm, setRegisterForm, handleRegister, errorMessage, setView }) => {
+  const [nameFocused, setNameFocused] = useState(false);
+  const [emailFocused, setEmailFocused] = useState(false);
+  const [passwordFocused, setPasswordFocused] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  return (
+    <div className="login-container">
+      <div className="login-background">
+        <div className="bg-circle bg-circle-1"></div>
+        <div className="bg-circle bg-circle-2"></div>
+        <div className="bg-circle bg-circle-3"></div>
+      </div>
+
+      <div className="login-card">
+        <div className="login-header">
+          <div className="logo-animated">●</div>
+          <h1 className="logo-text">CasaDirecta360</h1>
+          <p className="logo-subtitle">La mejor plataforma de inmuebles</p>
+        </div>
+
+        <div className="login-form-section">
+          <h2>Crear cuenta</h2>
+          <p className="login-description">Únete a nuestra comunidad inmobiliaria</p>
+
+          <form onSubmit={handleRegister} className="login-form">
+            <div className={`form-group-enhanced ${nameFocused ? 'focused' : ''} ${registerForm.name ? 'filled' : ''}`}>
+              <div className="input-wrapper">
+                <span className="input-icon">▪</span>
+                <input
+                  type="text"
+                  placeholder="Tu nombre completo"
+                  value={registerForm.name}
+                  onChange={(e) => setRegisterForm({ ...registerForm, name: e.target.value })}
+                  onFocus={() => setNameFocused(true)}
+                  onBlur={() => setNameFocused(false)}
+                  required
+                  className="input-field"
+                />
+                <label className="input-label">Nombre</label>
+              </div>
+              <div className="input-line"></div>
+            </div>
+
+            <div className={`form-group-enhanced ${emailFocused ? 'focused' : ''} ${registerForm.email ? 'filled' : ''}`}>
+              <div className="input-wrapper">
+                <span className="input-icon">✓</span>
+                <input
+                  type="email"
+                  placeholder="usuario@ejemplo.com"
+                  value={registerForm.email}
+                  onChange={(e) => setRegisterForm({ ...registerForm, email: e.target.value })}
+                  onFocus={() => setEmailFocused(true)}
+                  onBlur={() => setEmailFocused(false)}
+                  required
+                  className="input-field"
+                />
+                <label className="input-label">Email</label>
+              </div>
+              <div className="input-line"></div>
+            </div>
+
+            <div className={`form-group-enhanced ${passwordFocused ? 'focused' : ''} ${registerForm.password ? 'filled' : ''}`}>
+              <div className="input-wrapper">
+                <span className="input-icon">◆</span>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Mínimo 6 caracteres"
+                  value={registerForm.password}
+                  onChange={(e) => setRegisterForm({ ...registerForm, password: e.target.value })}
+                  onFocus={() => setPasswordFocused(true)}
+                  onBlur={() => setPasswordFocused(false)}
+                  required
+                  minLength="6"
+                  className="input-field"
+                />
+                <label className="input-label">Contraseña</label>
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? '●' : '○'}
+                </button>
+              </div>
+              <div className="input-line"></div>
+            </div>
+
+            {errorMessage && (
+              <div className="error-alert">
+                <span className="error-icon">!</span>
+                <p>{errorMessage}</p>
+              </div>
+            )}
+
+            <button type="submit" className="login-button-enhanced">
+              <span className="button-text">Registrarse</span>
+              <span className="button-icon">→</span>
+            </button>
+          </form>
+        </div>
+
+        <div className="login-footer">
+          <p>¿Ya tienes cuenta? <button onClick={() => setView('login')} className="link-button-enhanced">Inicia sesión aquí</button></p>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const UploadView = ({
   propertyForm, setPropertyForm, handlePropertySubmit, isEditing, isUploading,
@@ -203,7 +375,7 @@ const UploadView = ({
             {propertyForm.images.map((url, idx) => (
               <div key={idx} className="image-preview-item">
                 <img src={getImageUrl(url)} alt="preview" style={{ width: '100px', height: '100px', objectFit: 'cover' }} />
-                <button type="button" onClick={() => removeImage(idx)} className="remove-image">✕</button>
+                <button type="button" onClick={() => removeImage(idx)} className="remove-image">×</button>
               </div>
             ))}
           </div>
@@ -325,13 +497,13 @@ const PropertiesView = ({
             <div className="card-image">
               <img src={getImageUrl(property.images?.[0])} alt={property.title} style={{ width: '100%', height: '200px', objectFit: 'cover' }} />
               <button className={`favorite-btn ${favorites.includes(property.id) ? 'active' : ''}`} onClick={(e) => toggleFavorite(e, property.id)}>
-                {favorites.includes(property.id) ? '❤️' : '🤍'}
+                {favorites.includes(property.id) ? '♥' : '♡'}
               </button>
               <span className="property-type">{property.propertyType}</span>
               {(currentUser?.role === 'admin' || currentUser?.id === property.user_id) && (
                 <div className="card-actions">
-                  <button onClick={(e) => { e.stopPropagation(); editProperty(property); }} className="edit-btn">✏️</button>
-                  <button onClick={(e) => { e.stopPropagation(); confirmDelete(property); }} className="delete-btn">🗑️</button>
+                  <button onClick={(e) => { e.stopPropagation(); editProperty(property); }} className="edit-btn">✎</button>
+                  <button onClick={(e) => { e.stopPropagation(); confirmDelete(property); }} className="delete-btn">✕</button>
                 </div>
               )}
             </div>
@@ -343,8 +515,8 @@ const PropertiesView = ({
                 <span>{property.bedrooms} hab</span>
                 <span>{property.bathrooms} baños</span>
                 <span>{property.area} m²</span>
-                {property.occupied && <span>🔒 Ocupado</span>}
-                {property.reo && <span>🏦 REO</span>}
+                {property.occupied && <span>Ocupado</span>}
+                {property.reo && <span>REO</span>}
               </div>
             </div>
           </div>
@@ -432,6 +604,7 @@ function App() {
   const [errorMessage, setErrorMessage] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [filters, setFilters] = useState({
     province: '', city: '', propertyType: '', priceMin: '', priceMax: '',
     bedrooms: '', bathrooms: '', occupied: '', reo: ''
@@ -556,7 +729,11 @@ function App() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogoutClick = () => {
+    setShowLogoutConfirm(true);
+  };
+
+  const handleLogoutConfirm = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setIsLoggedIn(false);
@@ -564,7 +741,12 @@ function App() {
     setFavorites([]);
     setView('login');
     setLoginForm({ email: '', password: '' });
-    toast.success('Sesión cerrada');
+    setShowLogoutConfirm(false);
+    toast.success('Sesión cerrada correctamente');
+  };
+
+  const handleLogoutCancel = () => {
+    setShowLogoutConfirm(false);
   };
 
   // Images upload
@@ -716,14 +898,14 @@ function App() {
       <Toaster position="top-right" />
       <nav className="navbar">
         <div className="nav-container">
-          <h1 className="logo" onClick={() => isLoggedIn && setView('properties')}>🏠 idealista</h1>
+          <h1 className="logo" onClick={() => isLoggedIn && setView('properties')}>CasaDirecta360</h1>
           {isLoggedIn && (
             <div className="nav-buttons">
               <button onClick={() => { resetPropertyForm(); setView('upload'); }} className="publish-btn">Publicar</button>
               {currentUser?.role === 'admin' && (
                 <button onClick={() => setView('adminUsers')} className="admin-users-btn">Usuarios</button>
               )}
-              <button onClick={handleLogout} className="logout-btn">Salir</button>
+              <button onClick={handleLogoutClick} className="logout-btn">Salir</button>
             </div>
           )}
         </div>
@@ -769,6 +951,9 @@ function App() {
             </div>
           </div>
         </div>
+      )}
+      {showLogoutConfirm && (
+        <LogoutConfirmModal onConfirm={handleLogoutConfirm} onCancel={handleLogoutCancel} />
       )}
     </div>
   );
