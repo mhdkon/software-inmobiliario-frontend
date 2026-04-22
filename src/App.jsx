@@ -764,6 +764,7 @@ function App() {
       setFavorites(favArray.map(p => p.id));
     } catch (error) {
       console.error('Error en fetchFavorites:', error);
+      // Si hay error, no actualizamos el estado para no perder los existentes
     }
   }, [currentUser]);
 
@@ -987,7 +988,9 @@ function App() {
       
       toast.success(isEditing ? 'Propiedad actualizada' : 'Propiedad publicada');
       setView('properties');
-      fetchProperties();
+      // Refrescamos propiedades y favoritos para mantener sincronía
+      await fetchProperties();
+      await fetchFavorites();
       resetPropertyForm();
     } catch (error) {
       console.error('❌ Error en handlePropertySubmit:', error);
@@ -1028,7 +1031,8 @@ function App() {
     try {
       await authFetch(`/properties/${propertyToDelete.id}`, { method: 'DELETE' });
       toast.success('Propiedad eliminada');
-      fetchProperties();
+      await fetchProperties();
+      await fetchFavorites(); // Actualizar favoritos tras eliminar
       setShowDeleteModal(false);
       setPropertyToDelete(null);
     } catch (error) {
@@ -1048,7 +1052,13 @@ function App() {
         setFavorites([...favorites, propertyId]);
       }
     } catch (error) {
-      toast.error(error.message);
+      // Si el error es 404 y estábamos intentando eliminar, significa que no existía en backend.
+      // Actualizamos el estado local para que coincida.
+      if (error.message.includes('404') && isFav) {
+        setFavorites(favorites.filter(id => id !== propertyId));
+      } else {
+        toast.error(error.message);
+      }
     }
   };
 
