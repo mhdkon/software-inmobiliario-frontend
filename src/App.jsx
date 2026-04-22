@@ -5,9 +5,9 @@ import toast, { Toaster } from 'react-hot-toast';
 import './App.css';
 
 // ========================================================
-// CONFIGURACIÓN DE LA API - PRODUCCIÓN
+// CONFIGURACIÓN DE LA API - FORZADA PARA RENDER
 // ========================================================
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const API_BASE = 'https://backend-inmobiliaria-19rx.onrender.com/api';
 
 const authFetch = async (endpoint, options = {}) => {
   const token = localStorage.getItem('token');
@@ -51,6 +51,7 @@ const getImageUrl = (src) => {
   if (!src) return 'https://via.placeholder.com/400x200?text=Sin+imagen';
   if (src.startsWith('data:image')) return src;
   if (src.startsWith('/uploads/')) {
+    // Eliminar /api si está duplicado
     const baseUrl = API_BASE.replace('/api', '');
     return `${baseUrl}${src}`;
   }
@@ -547,18 +548,98 @@ const PropertiesView = ({
   );
 };
 
+// Componente de galería con carrusel (definido antes de DetailView)
+const GalleryCarousel = ({ images }) => {
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  
+  if (!images || images.length === 0) {
+    return (
+      <div className="gallery-carousel">
+        <img src="https://via.placeholder.com/600x400?text=Sin+imagen" alt="placeholder" />
+      </div>
+    );
+  }
+
+  const handlePrevious = () => {
+    setCurrentImageIndex((prev) => (prev === 0 ? images.length - 1 : prev - 1));
+  };
+
+  const handleNext = () => {
+    setCurrentImageIndex((prev) => (prev === images.length - 1 ? 0 : prev + 1));
+  };
+
+  return (
+    <div className="gallery-carousel">
+      <div className="carousel-container">
+        <img 
+          src={getImageUrl(images[currentImageIndex])} 
+          alt={`Imagen ${currentImageIndex + 1}`}
+          className="carousel-image"
+        />
+        
+        {images.length > 1 && (
+          <>
+            <button className="carousel-btn prev-btn" onClick={handlePrevious}>
+              ❮
+            </button>
+            <button className="carousel-btn next-btn" onClick={handleNext}>
+              ❯
+            </button>
+            
+            <div className="carousel-indicators">
+              {images.map((_, idx) => (
+                <button
+                  key={idx}
+                  className={`indicator ${idx === currentImageIndex ? 'active' : ''}`}
+                  onClick={() => setCurrentImageIndex(idx)}
+                  title={`Imagen ${idx + 1}`}
+                />
+              ))}
+            </div>
+            
+            <div className="carousel-counter">
+              {currentImageIndex + 1} / {images.length}
+            </div>
+          </>
+        )}
+      </div>
+      
+      {/* Miniaturas */}
+      {images.length > 1 && (
+        <div className="carousel-thumbnails">
+          {images.map((img, idx) => (
+            <button
+              key={idx}
+              className={`thumbnail ${idx === currentImageIndex ? 'active' : ''}`}
+              onClick={() => setCurrentImageIndex(idx)}
+            >
+              <img src={getImageUrl(img)} alt={`Thumb ${idx + 1}`} />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const DetailView = ({ selectedProperty, setView, formatPrice }) => {
   if (!selectedProperty) {
     return <div>Propiedad no encontrada</div>;
   }
   
   const direccion = `${selectedProperty.street}, ${selectedProperty.city}, ${selectedProperty.province}`;
+  
+  // Parsear imágenes si es string
+  const images = typeof selectedProperty.images === 'string' 
+    ? JSON.parse(selectedProperty.images || '[]')
+    : (Array.isArray(selectedProperty.images) ? selectedProperty.images : []);
+  
   return (
     <div className="detail-page">
       <button className="back-btn" onClick={() => setView('properties')}>← Volver</button>
       <div className="detail-content">
         <div className="detail-gallery">
-          <img src={getImageUrl(selectedProperty.images?.[0])} alt={selectedProperty.title} className="detail-image" />
+          <GalleryCarousel images={images} />
         </div>
         <div className="detail-info">
           <h1>{selectedProperty.title}</h1>
@@ -990,129 +1071,6 @@ function App() {
     if (typeof price !== 'number') price = parseFloat(price);
     return `€${price.toLocaleString('es-ES')}`;
   };
-
-// ========================================================
-// COMPONENTE DE GALERÍA CON CARRUSEL
-// ========================================================
-const GalleryCarousel = ({ images }) => {
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  
-  if (!images || images.length === 0) {
-    return (
-      <div className="gallery-carousel">
-        <img src="https://via.placeholder.com/600x400?text=Sin+imagen" alt="placeholder" />
-      </div>
-    );
-  }
-
-  const handlePrevious = () => {
-    setCurrentImageIndex((prev) => (prev === 0 ? images.length - 1 : prev - 1));
-  };
-
-  const handleNext = () => {
-    setCurrentImageIndex((prev) => (prev === images.length - 1 ? 0 : prev + 1));
-  };
-
-  return (
-    <div className="gallery-carousel">
-      <div className="carousel-container">
-        <img 
-          src={getImageUrl(images[currentImageIndex])} 
-          alt={`Imagen ${currentImageIndex + 1}`}
-          className="carousel-image"
-        />
-        
-        {images.length > 1 && (
-          <>
-            <button className="carousel-btn prev-btn" onClick={handlePrevious}>
-              ❮
-            </button>
-            <button className="carousel-btn next-btn" onClick={handleNext}>
-              ❯
-            </button>
-            
-            <div className="carousel-indicators">
-              {images.map((_, idx) => (
-                <button
-                  key={idx}
-                  className={`indicator ${idx === currentImageIndex ? 'active' : ''}`}
-                  onClick={() => setCurrentImageIndex(idx)}
-                  title={`Imagen ${idx + 1}`}
-                />
-              ))}
-            </div>
-            
-            <div className="carousel-counter">
-              {currentImageIndex + 1} / {images.length}
-            </div>
-          </>
-        )}
-      </div>
-      
-      {/* Miniaturas */}
-      {images.length > 1 && (
-        <div className="carousel-thumbnails">
-          {images.map((img, idx) => (
-            <button
-              key={idx}
-              className={`thumbnail ${idx === currentImageIndex ? 'active' : ''}`}
-              onClick={() => setCurrentImageIndex(idx)}
-            >
-              <img src={getImageUrl(img)} alt={`Thumb ${idx + 1}`} />
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ========================================================
-// ACTUALIZAR DetailView PARA USAR LA GALERÍA
-// ========================================================
-const DetailView = ({ selectedProperty, setView, formatPrice }) => {
-  if (!selectedProperty) {
-    return <div>Propiedad no encontrada</div>;
-  }
-  
-  const direccion = `${selectedProperty.street}, ${selectedProperty.city}, ${selectedProperty.province}`;
-  
-  // ✅ Parsear imágenes si es string
-  const images = typeof selectedProperty.images === 'string' 
-    ? JSON.parse(selectedProperty.images || '[]')
-    : (Array.isArray(selectedProperty.images) ? selectedProperty.images : []);
-  
-  return (
-    <div className="detail-page">
-      <button className="back-btn" onClick={() => setView('properties')}>← Volver</button>
-      <div className="detail-content">
-        <div className="detail-gallery">
-          {/* ✅ USAR LA GALERÍA AQUÍ */}
-          <GalleryCarousel images={images} />
-        </div>
-        <div className="detail-info">
-          <h1>{selectedProperty.title}</h1>
-          <p className="detail-location">{selectedProperty.street}, {selectedProperty.city}, {selectedProperty.province}</p>
-          <p className="detail-price">{formatPrice(selectedProperty.price)}</p>
-          <div className="detail-features">
-            <div className="feature"><span className="feature-label">Habitaciones</span><span className="feature-value">{selectedProperty.bedrooms}</span></div>
-            <div className="feature"><span className="feature-label">Baños</span><span className="feature-value">{selectedProperty.bathrooms}</span></div>
-            <div className="feature"><span className="feature-label">Superficie</span><span className="feature-value">{selectedProperty.area} m²</span></div>
-            <div className="feature"><span className="feature-label">Ocupado</span><span className="feature-value">{selectedProperty.occupied ? 'Sí' : 'No'}</span></div>
-            <div className="feature"><span className="feature-label">REO</span><span className="feature-value">{selectedProperty.reo ? 'Sí' : 'No'}</span></div>
-          </div>
-          <h3>Descripción</h3>
-          <p className="detail-description">{selectedProperty.description}</p>
-          <MapaIframe lat={selectedProperty.lat} lng={selectedProperty.lng} direccion={direccion} />
-          <p className="detail-date">Publicado: {new Date(selectedProperty.createdAt).toLocaleDateString()}</p>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-
-
 
   // ========================================================
   // RENDER
