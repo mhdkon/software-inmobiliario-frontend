@@ -5,9 +5,9 @@ import toast, { Toaster } from 'react-hot-toast';
 import './App.css';
 
 // ========================================================
-// CONFIGURACIÓN DE LA API - FORZADA PARA RENDER
+// CONFIGURACIÓN DE LA API - USA VARIABLE DE ENTORNO
 // ========================================================
-const API_BASE = 'https://backend-inmobiliaria-19rx.onrender.com/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'https://backend-inmobiliaria-19rx.onrender.com/api';
 
 const authFetch = async (endpoint, options = {}) => {
   const token = localStorage.getItem('token');
@@ -51,7 +51,6 @@ const getImageUrl = (src) => {
   if (!src) return 'https://via.placeholder.com/400x200?text=Sin+imagen';
   if (src.startsWith('data:image')) return src;
   if (src.startsWith('/uploads/')) {
-    // Eliminar /api si está duplicado
     const baseUrl = API_BASE.replace('/api', '');
     return `${baseUrl}${src}`;
   }
