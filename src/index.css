@@ -1236,14 +1236,21 @@ input:hover, textarea:hover, select:hover {
 }
 
 /* ========================================================
-   GRID DE PROPIEDADES CON EFECTOS ÉPICOS
+   GRID DE PROPIEDADES CON EFECTOS ÉPICOS - MEJORADO RESPONSIVE
    ======================================================== */
 
 .properties-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 28px;
   margin-bottom: 50px;
+}
+/* RESPONSIVE FIX: Ajuste para pantallas muy pequeñas */
+@media (max-width: 640px) {
+  .properties-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
 }
 
 .property-card {
@@ -1717,7 +1724,7 @@ input:hover, textarea:hover, select:hover {
 }
 
 /* ========================================================
-   GESTIÓN DE USUARIOS (ADMIN)
+   GESTIÓN DE USUARIOS (ADMIN) - RESPONSIVE FIX
    ======================================================== */
 
 .admin-users-container {
@@ -1741,13 +1748,14 @@ input:hover, textarea:hover, select:hover {
   background: var(--white);
   border-radius: 18px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
+  overflow-x: auto; /* RESPONSIVE FIX: permite scroll horizontal en tablas */
   border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .users-table table {
   width: 100%;
   border-collapse: collapse;
+  min-width: 500px; /* RESPONSIVE FIX: evita que la tabla se rompa en móvil */
 }
 
 .users-table th {
@@ -2000,11 +2008,6 @@ input:hover, textarea:hover, select:hover {
     min-width: auto;
   }
 
-  .properties-grid {
-    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-    gap: 16px;
-  }
-
   .property-card {
     animation: slideUpIn 0.5s ease-out;
   }
@@ -2211,7 +2214,6 @@ input:hover, textarea:hover, select:hover {
   }
 
   .form-row {
-    grid-template-columns: 1fr;
     gap: 14px;
   }
 
@@ -2221,15 +2223,6 @@ input:hover, textarea:hover, select:hover {
 
   .properties-page {
     padding: 20px 10px;
-  }
-
-  .properties-grid {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-
-  .property-card {
-    margin: 0;
   }
 
   .card-image {
@@ -2428,7 +2421,7 @@ input:hover, textarea:hover, select:hover {
 
 
 /* ========================================================
- * GALERÍA CARRUSEL
+ * GALERÍA CARRUSEL - RESPONSIVE FIX
  * ======================================================== */
 
 .gallery-carousel {
@@ -2456,15 +2449,6 @@ input:hover, textarea:hover, select:hover {
   object-fit: cover;
   display: block;
   animation: fadeIn 0.3s ease-in-out;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
 }
 
 /* Botones de navegación */
@@ -2549,7 +2533,7 @@ input:hover, textarea:hover, select:hover {
   z-index: 10;
 }
 
-/* Miniaturas */
+/* Miniaturas - RESPONSIVE FIX: mejor scroll en móvil */
 .carousel-thumbnails {
   display: flex;
   gap: 10px;
@@ -2559,6 +2543,7 @@ input:hover, textarea:hover, select:hover {
   border-radius: 8px;
   scroll-behavior: smooth;
   max-width: 100%;
+  -webkit-overflow-scrolling: touch; /* mejor scroll en iOS */
 }
 
 .carousel-thumbnails::-webkit-scrollbar {
@@ -2610,7 +2595,7 @@ input:hover, textarea:hover, select:hover {
   box-shadow: 0 0 0 2px white, 0 0 10px rgba(0, 123, 255, 0.5);
 }
 
-/* Responsive */
+/* Responsive del carrusel */
 @media (max-width: 768px) {
   .carousel-container {
     aspect-ratio: 3 / 2;
