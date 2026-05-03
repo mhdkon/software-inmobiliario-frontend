@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import toast, { Toaster } from 'react-hot-toast';
+import imageCompression from 'browser-image-compression';
 import './App.css';
 
 // ========================================================
@@ -860,7 +861,7 @@ function App() {
   };
 
   // ========================================================
-  // MANEJO DE IMÁGENES
+  // MANEJO DE IMÁGENES CON COMPRESIÓN
   // ========================================================
   const handleImageUpload = async (e) => {
     const files = Array.from(e.target.files);
@@ -872,8 +873,26 @@ function App() {
       return;
     }
     
+    const toastId = toast.loading('Comprimiendo imágenes...', { duration: 0 });
+    
     try {
-      const base64Promises = files.map(file => 
+      // Configuración de compresión (ajustable)
+      const options = {
+        maxSizeMB: 1,           // Tamaño máximo final: menos de 1 MB
+        maxWidthOrHeight: 1920, // Escala si es más grande
+        useWebWorker: true,
+      };
+      
+      const compressedFiles = await Promise.all(
+        files.map(async (file) => {
+          console.log(`🔄 Comprimiendo: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+          const compressed = await imageCompression(file, options);
+          console.log(`✅ Comprimido: ${compressed.name} (${(compressed.size / 1024 / 1024).toFixed(2)} MB)`);
+          return compressed;
+        })
+      );
+      
+      const base64Promises = compressedFiles.map(file => 
         new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result);
@@ -886,15 +905,13 @@ function App() {
       setPropertyForm(prev => ({ 
         ...prev, 
         images: [...(prev.images || []), ...base64Images],
-        imageFiles: [...(prev.imageFiles || []), ...files]
+        imageFiles: [...(prev.imageFiles || []), ...compressedFiles]
       }));
       
-      console.log(`✅ ${files.length} imagen(es) cargada(s)`);
-      console.log(`   Total imágenes: ${currentImageCount + files.length}/10`);
-      toast.success(`${files.length} imagen(es) cargada(s)`);
+      toast.success(`${files.length} imagen(es) comprimida(s) y cargada(s)`, { id: toastId });
     } catch (error) {
       console.error('❌ Error en handleImageUpload:', error);
-      toast.error('Error al cargar imágenes');
+      toast.error('Error al comprimir imágenes', { id: toastId });
     }
   };
 
