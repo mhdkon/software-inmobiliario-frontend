@@ -6,23 +6,40 @@ import imageCompression from 'browser-image-compression';
 import './App.css';
 
 // ========================================================
-// CONFIGURACIÓN DE LA API - USA VARIABLE DE ENTORNO
+// CONFIGURACIÓN DE LA API
 // ========================================================
 const API_BASE = import.meta.env.VITE_API_URL || 'https://backend-inmobiliaria-19rx.onrender.com/api';
 
 const authFetch = async (endpoint, options = {}) => {
   const token = localStorage.getItem('token');
+  
+  // Si no hay token, lanzar error
+  if (!token) {
+    throw new Error('No autenticado. Por favor, inicia sesión nuevamente.');
+  }
+  
   const headers = {
     'Content-Type': 'application/json',
-    ...(token && { Authorization: `Bearer ${token}` }),
+    'Authorization': `Bearer ${token}`,
     ...options.headers,
   };
+  
   const config = { ...options, headers };
   const response = await fetch(`${API_BASE}${endpoint}`, config);
+  
+  // Si recibimos 401, el token es inválido
+  if (response.status === 401) {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    window.location.reload();
+    throw new Error('Sesión expirada. Por favor, inicia sesión nuevamente.');
+  }
+  
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.error || 'Error en la petición');
   }
+  
   return response.json();
 };
 
@@ -32,6 +49,7 @@ const authFetch = async (endpoint, options = {}) => {
 const provincesSpain = [
   'Madrid', 'Barcelona', 'Valencia', 'Sevilla', 'Zaragoza', 'Málaga', 'Murcia', 'Palma', 'Las Palmas', 'Bilbao'
 ];
+
 const citiesByProvinceSpain = {
   'Madrid': ['Madrid', 'Alcalá de Henares', 'Móstoles', 'Getafe'],
   'Barcelona': ['Barcelona', 'Hospitalet de Llobregat', 'Badalona', 'Sabadell'],
@@ -60,7 +78,7 @@ const getImageUrl = (src) => {
 };
 
 // ========================================================
-// COMPONENTE DE MAPA GRATUITO CON IFRAME
+// COMPONENTE DE MAPA
 // ========================================================
 const MapaIframe = ({ lat, lng, direccion }) => {
   let mapSrc = '';
@@ -316,87 +334,107 @@ const RegisterView = ({ registerForm, setRegisterForm, handleRegister, errorMess
 const UploadView = ({
   propertyForm, setPropertyForm, handlePropertySubmit, isEditing, isUploading,
   handleImageUpload, removeImage, resetPropertyForm, setView, provincesSpain, citiesByProvinceSpain
-}) => (
-  <div className="upload-container">
-    <h2>{isEditing ? 'Editar propiedad' : 'Publicar propiedad'}</h2>
-    <form onSubmit={handlePropertySubmit}>
-      <div className="form-group">
-        <label>Título *</label>
-        <input type="text" placeholder="Ej: Casa moderna en Madrid" value={propertyForm.title} onChange={(e) => setPropertyForm({...propertyForm, title: e.target.value})} required />
-      </div>
-      <div className="form-group">
-        <label>Descripción</label>
-        <textarea placeholder="Describe la propiedad..." value={propertyForm.description} onChange={(e) => setPropertyForm({...propertyForm, description: e.target.value})} required rows="4" />
-      </div>
-      <div className="form-row">
+}) => {
+  const newImagesCount = propertyForm.imageFiles?.length || 0;
+  const totalImages = (propertyForm.images?.length || 0);
+  const remainingSlots = 10 - totalImages;
+
+  return (
+    <div className="upload-container">
+      <h2>{isEditing ? 'Editar propiedad' : 'Publicar propiedad'}</h2>
+      <form onSubmit={handlePropertySubmit}>
         <div className="form-group">
-          <label>Provincia *</label>
-          <select value={propertyForm.province} onChange={(e) => setPropertyForm({...propertyForm, province: e.target.value, city: ''})} required>
-            <option value="">Selecciona provincia</option>
-            {provincesSpain.map(p => <option key={p} value={p}>{p}</option>)}
-          </select>
+          <label>Título *</label>
+          <input type="text" placeholder="Ej: Casa moderna en Madrid" value={propertyForm.title} onChange={(e) => setPropertyForm({...propertyForm, title: e.target.value})} required />
         </div>
         <div className="form-group">
-          <label>Ciudad *</label>
-          <select value={propertyForm.city} onChange={(e) => setPropertyForm({...propertyForm, city: e.target.value})} required disabled={!propertyForm.province}>
-            <option value="">Selecciona ciudad</option>
-            {propertyForm.province && citiesByProvinceSpain[propertyForm.province]?.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
+          <label>Descripción</label>
+          <textarea placeholder="Describe la propiedad..." value={propertyForm.description} onChange={(e) => setPropertyForm({...propertyForm, description: e.target.value})} required rows="4" />
         </div>
-      </div>
-      <div className="form-group">
-        <label>Calle y número *</label>
-        <input type="text" placeholder="Ej: Gran Vía 25" value={propertyForm.street} onChange={(e) => setPropertyForm({...propertyForm, street: e.target.value})} required />
-      </div>
-      <div className="form-row">
-        <div className="form-group"><label>Tipo</label><select value={propertyForm.propertyType} onChange={(e) => setPropertyForm({...propertyForm, propertyType: e.target.value})}><option value="casa">Casa</option><option value="piso">Piso</option><option value="ático">Ático</option><option value="estudio">Estudio</option><option value="loft">Loft</option><option value="local">Local</option><option value="garaje">Plaza de garaje</option></select></div>
-        <div className="form-group"><label>Precio (€) *</label><input type="number" placeholder="250000" value={propertyForm.price} onChange={(e) => setPropertyForm({...propertyForm, price: e.target.value})} required /></div>
-      </div>
-      <div className="form-row">
-        <div className="form-group"><label>Área (m²)</label><input type="number" placeholder="120" value={propertyForm.area} onChange={(e) => setPropertyForm({...propertyForm, area: e.target.value})} required /></div>
-        <div className="form-group"><label>Habitaciones</label><input type="number" placeholder="3" value={propertyForm.bedrooms} onChange={(e) => setPropertyForm({...propertyForm, bedrooms: e.target.value})} required /></div>
-        <div className="form-group"><label>Baños</label><input type="number" placeholder="2" value={propertyForm.bathrooms} onChange={(e) => setPropertyForm({...propertyForm, bathrooms: e.target.value})} required /></div>
-      </div>
-      <div className="form-row">
-        <div className="form-group"><label>¿Ocupado?</label><select value={propertyForm.occupied} onChange={(e) => setPropertyForm({...propertyForm, occupied: e.target.value === 'true'})}><option value={false}>No</option><option value={true}>Sí</option></select></div>
-        <div className="form-group"><label>¿REO?</label><select value={propertyForm.reo} onChange={(e) => setPropertyForm({...propertyForm, reo: e.target.value === 'true'})}><option value={false}>No</option><option value={true}>Sí</option></select></div>
-      </div>
-      <div className="form-row">
-        <div className="form-group"><label>Latitud (opcional)</label><input type="number" step="any" placeholder="40.4168" value={propertyForm.lat} onChange={(e) => setPropertyForm({...propertyForm, lat: e.target.value})} /></div>
-        <div className="form-group"><label>Longitud (opcional)</label><input type="number" step="any" placeholder="-3.7038" value={propertyForm.lng} onChange={(e) => setPropertyForm({...propertyForm, lng: e.target.value})} /></div>
-      </div>
-      <div className="form-group">
-        <label>Fotos (máximo 10 imágenes)</label>
-        <input 
-          type="file" 
-          multiple 
-          accept="image/*" 
-          onChange={handleImageUpload} 
-          className="file-input" 
-          disabled={isUploading || (propertyForm.images && propertyForm.images.length >= 10)}
-        />
-        {isUploading && <p className="upload-status">Subiendo imágenes...</p>}
-        {propertyForm.images && propertyForm.images.length > 0 && (
-          <div className="image-preview">
-            <p>✅ Imágenes cargadas: {propertyForm.images.length}/10</p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '10px' }}>
-              {propertyForm.images.map((url, idx) => (
-                <div key={idx} className="image-preview-item" style={{ position: 'relative' }}>
-                  <img src={getImageUrl(url)} alt={`preview-${idx}`} style={{ width: '100%', height: '100px', objectFit: 'cover', borderRadius: '4px' }} />
-                  <button type="button" onClick={() => removeImage(idx)} className="remove-image" style={{ position: 'absolute', top: '5px', right: '5px', background: 'red', color: 'white', border: 'none', borderRadius: '50%', width: '24px', height: '24px', cursor: 'pointer' }}>✕</button>
-                </div>
-              ))}
-            </div>
+        <div className="form-row">
+          <div className="form-group">
+            <label>Provincia *</label>
+            <select value={propertyForm.province} onChange={(e) => setPropertyForm({...propertyForm, province: e.target.value, city: ''})} required>
+              <option value="">Selecciona provincia</option>
+              {provincesSpain.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
           </div>
-        )}
-      </div>
-      <div className="form-actions">
-        <button type="button" onClick={() => { resetPropertyForm(); setView('properties'); }} className="cancel-btn">Cancelar</button>
-        <button type="submit" className="submit-btn" disabled={isUploading}>{isEditing ? 'Actualizar' : 'Publicar'}</button>
-      </div>
-    </form>
-  </div>
-);
+          <div className="form-group">
+            <label>Ciudad *</label>
+            <select value={propertyForm.city} onChange={(e) => setPropertyForm({...propertyForm, city: e.target.value})} required disabled={!propertyForm.province}>
+              <option value="">Selecciona ciudad</option>
+              {propertyForm.province && citiesByProvinceSpain[propertyForm.province]?.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="form-group">
+          <label>Calle y número *</label>
+          <input type="text" placeholder="Ej: Gran Vía 25" value={propertyForm.street} onChange={(e) => setPropertyForm({...propertyForm, street: e.target.value})} required />
+        </div>
+        <div className="form-row">
+          <div className="form-group"><label>Tipo</label><select value={propertyForm.propertyType} onChange={(e) => setPropertyForm({...propertyForm, propertyType: e.target.value})}><option value="casa">Casa</option><option value="piso">Piso</option><option value="ático">Ático</option><option value="estudio">Estudio</option><option value="loft">Loft</option><option value="local">Local</option><option value="garaje">Plaza de garaje</option></select></div>
+          <div className="form-group"><label>Precio (€) *</label><input type="number" placeholder="250000" value={propertyForm.price} onChange={(e) => setPropertyForm({...propertyForm, price: e.target.value})} required /></div>
+        </div>
+        <div className="form-row">
+          <div className="form-group"><label>Área (m²)</label><input type="number" placeholder="120" value={propertyForm.area} onChange={(e) => setPropertyForm({...propertyForm, area: e.target.value})} required /></div>
+          <div className="form-group"><label>Habitaciones</label><input type="number" placeholder="3" value={propertyForm.bedrooms} onChange={(e) => setPropertyForm({...propertyForm, bedrooms: e.target.value})} required /></div>
+          <div className="form-group"><label>Baños</label><input type="number" placeholder="2" value={propertyForm.bathrooms} onChange={(e) => setPropertyForm({...propertyForm, bathrooms: e.target.value})} required /></div>
+        </div>
+        <div className="form-row">
+          <div className="form-group"><label>¿Ocupado?</label><select value={propertyForm.occupied} onChange={(e) => setPropertyForm({...propertyForm, occupied: e.target.value === 'true'})}><option value={false}>No</option><option value={true}>Sí</option></select></div>
+          <div className="form-group"><label>¿REO?</label><select value={propertyForm.reo} onChange={(e) => setPropertyForm({...propertyForm, reo: e.target.value === 'true'})}><option value={false}>No</option><option value={true}>Sí</option></select></div>
+        </div>
+        <div className="form-row">
+          <div className="form-group"><label>Latitud (opcional)</label><input type="number" step="any" placeholder="40.4168" value={propertyForm.lat} onChange={(e) => setPropertyForm({...propertyForm, lat: e.target.value})} /></div>
+          <div className="form-group"><label>Longitud (opcional)</label><input type="number" step="any" placeholder="-3.7038" value={propertyForm.lng} onChange={(e) => setPropertyForm({...propertyForm, lng: e.target.value})} /></div>
+        </div>
+        <div className="form-group">
+          <label>Fotos (máximo 10 imágenes)</label>
+          <input 
+            type="file" 
+            multiple 
+            accept="image/*" 
+            onChange={handleImageUpload} 
+            className="file-input" 
+            disabled={isUploading || remainingSlots <= 0}
+          />
+          {isUploading && <p className="upload-status">Subiendo imágenes...</p>}
+          {propertyForm.images && propertyForm.images.length > 0 && (
+            <div className="image-preview">
+              <p>Imágenes: {totalImages}/10 {newImagesCount > 0 && `(${newImagesCount} nuevas)`}</p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '10px' }}>
+                {propertyForm.images.map((url, idx) => (
+                  <div key={idx} className="image-preview-item" style={{ position: 'relative' }}>
+                    <img 
+                      src={getImageUrl(url)} 
+                      alt={`preview-${idx}`} 
+                      style={{ width: '100%', height: '100px', objectFit: 'cover', borderRadius: '4px' }} 
+                      onError={(e) => {
+                        e.target.src = 'https://via.placeholder.com/100x100?text=Error';
+                      }}
+                    />
+                    <button 
+                      type="button" 
+                      onClick={() => removeImage(idx)} 
+                      className="remove-image" 
+                      style={{ position: 'absolute', top: '5px', right: '5px', background: 'red', color: 'white', border: 'none', borderRadius: '50%', width: '24px', height: '24px', cursor: 'pointer' }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="form-actions">
+          <button type="button" onClick={() => { resetPropertyForm(); setView('properties'); }} className="cancel-btn">Cancelar</button>
+          <button type="submit" className="submit-btn" disabled={isUploading}>{isEditing ? 'Actualizar' : 'Publicar'}</button>
+        </div>
+      </form>
+    </div>
+  );
+};
 
 const PropertiesView = ({
   filters, setFilters, properties, loading, currentPage, setCurrentPage, totalPages,
@@ -548,7 +586,7 @@ const PropertiesView = ({
   );
 };
 
-// Componente de galería con carrusel (definido antes de DetailView)
+// Componente de galería con carrusel
 const GalleryCarousel = ({ images }) => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   
@@ -604,7 +642,6 @@ const GalleryCarousel = ({ images }) => {
         )}
       </div>
       
-      {/* Miniaturas */}
       {images.length > 1 && (
         <div className="carousel-thumbnails">
           {images.map((img, idx) => (
@@ -629,7 +666,6 @@ const DetailView = ({ selectedProperty, setView, formatPrice }) => {
   
   const direccion = `${selectedProperty.street}, ${selectedProperty.city}, ${selectedProperty.province}`;
   
-  // Parsear imágenes si es string
   const images = typeof selectedProperty.images === 'string' 
     ? JSON.parse(selectedProperty.images || '[]')
     : (Array.isArray(selectedProperty.images) ? selectedProperty.images : []);
@@ -688,7 +724,7 @@ const AdminUsersView = ({ users, deleteUser, setView }) => (
 );
 
 // ========================================================
-// COMPONENTE PRINCIPAL App
+// COMPONENTE PRINCIPAL APP
 // ========================================================
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -718,6 +754,13 @@ function App() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [propertyToDelete, setPropertyToDelete] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
+
+  // NO restaurar sesión - SIEMPRE ir al login
+  // SOLO se restaura cuando el usuario hace login manualmente
+  useEffect(() => {
+    // No hacer nada, dejar en login por defecto
+    setView('login');
+  }, []);
 
   // ========================================================
   // API CALLS
@@ -764,8 +807,7 @@ function App() {
       const favArray = Array.isArray(data) ? data : [];
       setFavorites(favArray.map(p => p.id));
     } catch (error) {
-      console.error('Error en fetchFavorites:', error);
-      // Si hay error, no actualizamos el estado para no perder los existentes
+      console.error('Error al cargar favoritos:', error.message);
     }
   }, [currentUser]);
 
@@ -814,9 +856,11 @@ function App() {
       setIsLoggedIn(true);
       setView('properties');
       setErrorMessage('');
+      setLoginForm({ email: '', password: '' });
       toast.success(`Bienvenido ${user.name}`);
     } catch (error) {
       setErrorMessage(error.message);
+      toast.error(error.message);
     }
   };
 
@@ -835,8 +879,10 @@ function App() {
       toast.success('Registro exitoso. Ahora inicia sesión.');
       setView('login');
       setRegisterForm({ name: '', email: '', password: '' });
+      setErrorMessage('');
     } catch (error) {
       setErrorMessage(error.message);
+      toast.error(error.message);
     }
   };
 
@@ -853,6 +899,8 @@ function App() {
     setView('login');
     setLoginForm({ email: '', password: '' });
     setShowLogoutConfirm(false);
+    setProperties([]);
+    setUsers([]);
     toast.success('Sesión cerrada correctamente');
   };
 
@@ -861,7 +909,7 @@ function App() {
   };
 
   // ========================================================
-  // MANEJO DE IMÁGENES CON COMPRESIÓN
+  // MANEJO DE IMÁGENES
   // ========================================================
   const handleImageUpload = async (e) => {
     const files = Array.from(e.target.files);
@@ -876,18 +924,15 @@ function App() {
     const toastId = toast.loading('Comprimiendo imágenes...', { duration: 0 });
     
     try {
-      // Configuración de compresión (ajustable)
       const options = {
-        maxSizeMB: 1,           // Tamaño máximo final: menos de 1 MB
-        maxWidthOrHeight: 1920, // Escala si es más grande
+        maxSizeMB: 1,
+        maxWidthOrHeight: 1920,
         useWebWorker: true,
       };
       
       const compressedFiles = await Promise.all(
         files.map(async (file) => {
-          console.log(`🔄 Comprimiendo: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
           const compressed = await imageCompression(file, options);
-          console.log(`✅ Comprimido: ${compressed.name} (${(compressed.size / 1024 / 1024).toFixed(2)} MB)`);
           return compressed;
         })
       );
@@ -909,8 +954,9 @@ function App() {
       }));
       
       toast.success(`${files.length} imagen(es) comprimida(s) y cargada(s)`, { id: toastId });
+      e.target.value = '';
     } catch (error) {
-      console.error('❌ Error en handleImageUpload:', error);
+      console.error('Error en handleImageUpload:', error);
       toast.error('Error al comprimir imágenes', { id: toastId });
     }
   };
@@ -921,7 +967,6 @@ function App() {
       images: (prev.images || []).filter((_, idx) => idx !== indexToRemove),
       imageFiles: (prev.imageFiles || []).filter((_, idx) => idx !== indexToRemove)
     }));
-    console.log(`🗑️ Imagen ${indexToRemove} eliminada`);
   };
 
   const resetPropertyForm = () => {
@@ -939,9 +984,7 @@ function App() {
   const handlePropertySubmit = async (e) => {
     e.preventDefault();
     
-    console.log('📤 Iniciando envío de propiedad...');
-    console.log(`   Imágenes en preview: ${propertyForm.images.length}`);
-    console.log(`   Archivos reales: ${propertyForm.imageFiles.length}`);
+    setIsUploading(true);
     
     const formData = new FormData();
     formData.append('title', propertyForm.title);
@@ -960,13 +1003,9 @@ function App() {
     formData.append('lng', propertyForm.lng || '0');
     
     if (propertyForm.imageFiles && propertyForm.imageFiles.length > 0) {
-      console.log(`📁 Añadiendo ${propertyForm.imageFiles.length} archivo(s) a FormData:`);
-      propertyForm.imageFiles.forEach((file, idx) => {
-        console.log(`   ${idx + 1}. ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+      propertyForm.imageFiles.forEach((file) => {
         formData.append('images', file);
       });
-    } else {
-      console.warn('⚠️ ¡ATENCIÓN! No hay archivos para enviar');
     }
     
     const token = localStorage.getItem('token');
@@ -974,8 +1013,6 @@ function App() {
     const method = isEditing ? 'PUT' : 'POST';
     
     try {
-      console.log(`📤 Enviando ${method} a: ${url}`);
-      
       const response = await fetch(url, {
         method,
         headers: { 
@@ -986,36 +1023,29 @@ function App() {
       
       if (!response.ok) {
         const error = await response.json();
-        console.error('❌ Error del servidor:', error);
         throw new Error(error.error || `Error ${response.status}`);
       }
       
       const responseData = await response.json();
-      console.log('✅ Respuesta del servidor:', responseData);
-      
-      if (responseData.images) {
-        console.log(`📸 Imágenes subidas a Cloudinary:`);
-        const imageArray = Array.isArray(responseData.images) ? responseData.images : JSON.parse(responseData.images || '[]');
-        imageArray.forEach((url, idx) => {
-          console.log(`   ${idx + 1}. ${url}`);
-        });
-      } else {
-        console.warn('⚠️ No hay imágenes en la respuesta');
-      }
       
       toast.success(isEditing ? 'Propiedad actualizada' : 'Propiedad publicada');
       setView('properties');
-      // Refrescamos propiedades y favoritos para mantener sincronía
       await fetchProperties();
       await fetchFavorites();
       resetPropertyForm();
     } catch (error) {
-      console.error('❌ Error en handlePropertySubmit:', error);
+      console.error('Error en handlePropertySubmit:', error);
       toast.error(error.message);
+    } finally {
+      setIsUploading(false);
     }
   };
 
   const editProperty = (property) => {
+    const images = typeof property.images === 'string' 
+      ? JSON.parse(property.images || '[]')
+      : (Array.isArray(property.images) ? property.images : []);
+
     setPropertyForm({
       id: property.id,
       title: property.title,
@@ -1032,7 +1062,7 @@ function App() {
       reo: property.reo,
       lat: property.lat || '',
       lng: property.lng || '',
-      images: property.images || [],
+      images: images,
       imageFiles: []
     });
     setIsEditing(true);
@@ -1049,7 +1079,7 @@ function App() {
       await authFetch(`/properties/${propertyToDelete.id}`, { method: 'DELETE' });
       toast.success('Propiedad eliminada');
       await fetchProperties();
-      await fetchFavorites(); // Actualizar favoritos tras eliminar
+      await fetchFavorites();
       setShowDeleteModal(false);
       setPropertyToDelete(null);
     } catch (error) {
@@ -1064,17 +1094,17 @@ function App() {
       if (isFav) {
         await authFetch(`/favorites/${propertyId}`, { method: 'DELETE' });
         setFavorites(favorites.filter(id => id !== propertyId));
+        toast.success('Eliminado de favoritos');
       } else {
         await authFetch(`/favorites/${propertyId}`, { method: 'POST' });
         setFavorites([...favorites, propertyId]);
+        toast.success('Añadido a favoritos');
       }
     } catch (error) {
-      // Si el error es 404 y estábamos intentando eliminar, significa que no existía en backend.
-      // Actualizamos el estado local para que coincida.
       if (error.message.includes('404') && isFav) {
         setFavorites(favorites.filter(id => id !== propertyId));
       } else {
-        toast.error(error.message);
+        console.error('Error al actualizar favorito:', error);
       }
     }
   };
@@ -1103,7 +1133,7 @@ function App() {
   // ========================================================
   return (
     <div className="app">
-      <Toaster position="top-right" />
+      <Toaster position="top-right" reverseOrder={false} />
       <nav className="navbar">
         <div className="nav-container">
           <h1 className="logo" onClick={() => isLoggedIn && setView('properties')}>CasaDirecta360</h1>
@@ -1154,7 +1184,7 @@ function App() {
             <h3>¿Eliminar propiedad?</h3>
             <p>¿Estás seguro de que quieres eliminar "{propertyToDelete.title}"?</p>
             <div className="modal-buttons">
-              <button onClick={() => setShowDeleteModal(false)}>Cancelar</button>
+              <button onClick={() => setShowDeleteModal(false)} className="btn-cancel">Cancelar</button>
               <button onClick={deleteProperty} className="btn-danger">Eliminar</button>
             </div>
           </div>
